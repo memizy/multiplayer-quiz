@@ -374,27 +374,17 @@
 
 <script>
 let sdk = null;
-let bufferedMessages = [];
-let sessionRole = null;
-
-function isPluginMessage(msg) {
-  return msg && typeof msg === 'object' && typeof msg.type === 'string';
-}
 
 function sdkSendAction(type, data) {
   if (!sdk) {
     console.warn('[multiplayer-quiz] sdk not ready for sendAction', type);
     return;
   }
-  if (typeof sdk.sendAction === 'function') {
-    sdk.sendAction(type, data);
-    return;
-  }
   if (sdk.player && typeof sdk.player.sendAction === 'function') {
     sdk.player.sendAction(type, data);
     return;
   }
-  console.error('[multiplayer-quiz] no sendAction API found on SDK');
+  console.error('[multiplayer-quiz] no player.sendAction API found on SDK');
 }
 
 function sdkBroadcastState(state) {
@@ -402,101 +392,83 @@ function sdkBroadcastState(state) {
     console.warn('[multiplayer-quiz] sdk not ready for broadcast');
     return;
   }
-  if (typeof sdk.broadcastState === 'function') {
-    sdk.broadcastState(state);
-    return;
-  }
   if (sdk.host && typeof sdk.host.broadcastState === 'function') {
     sdk.host.broadcastState(state);
     return;
   }
-  console.error('[multiplayer-quiz] no broadcastState API found on SDK');
+  console.error('[multiplayer-quiz] no host.broadcastState API found on SDK');
 }
 
-function processIncomingPluginMessage(msg) {
-  if (!isPluginMessage(msg)) return;
+async function bootstrapSdkRuntime() {
+  try {
+    const {
+      createMultiplayerPlugin,
+      loadManifestFromDataIsland,
+      renderLandingPageIfNeeded,
+    } = await import('https://cdn.jsdelivr.net/npm/@memizy/multiplayer-sdk@0.1.4/+esm');
 
-  const payload = msg.payload ?? msg.context ?? msg;
+    const manifest = typeof loadManifestFromDataIsland === 'function'
+      ? loadManifestFromDataIsland()
+      : null;
 
-  if (msg.type === 'MULTI_INIT') {
-    const role = msg.role ?? payload?.role ?? null;
-    sessionRole = role;
-    console.debug('[multiplayer-quiz] MULTI_INIT received', { role, payload });
+    const renderedStandalone = typeof renderLandingPageIfNeeded === 'function'
+      ? renderLandingPageIfNeeded(manifest, {
+          docsUrl: 'https://learn.memizy.com/multiplayer',
+          sandboxUrl: 'https://learn.memizy.com/multiplayer/sandbox',
+        })
+      : false;
 
-    if (role === 'host') {
-      Plugin.initHost(payload);
+    if (renderedStandalone) {
       return;
     }
-    if (role === 'player') {
-      Plugin.initPlayer(payload);
-      return;
-    }
 
-    console.warn('[multiplayer-quiz] MULTI_INIT received without valid role', msg);
-    return;
-  }
-
-  if (msg.type === 'STATE_UPDATE' && sessionRole === 'player') {
-    Plugin.onStateUpdate(payload?.state ?? payload);
-    return;
-  }
-
-  if (msg.type === 'PLAYER_JOINED' && sessionRole === 'host') {
-    Plugin.onPlayerJoined(payload?.player ?? payload);
-    return;
-  }
-
-  if (msg.type === 'PLAYER_LEFT' && sessionRole === 'host') {
-    Plugin.onPlayerLeft(payload?.playerId ?? payload);
-    return;
-  }
-
-  if (msg.type === 'MULTI_ACTION' && sessionRole === 'host') {
-    Plugin.onPlayerAction(payload);
-  }
-}
-
-function runtimeIncomingMessageHandler(event) {
-  processIncomingPluginMessage(event.data);
-}
-
-function bufferIncomingMessage(event) {
-  const msg = event.data;
-  if (!isPluginMessage(msg)) return;
-  bufferedMessages.push(msg);
-}
-
-// Capture early messages (especially MULTI_INIT) that may arrive before SDK import finishes.
-window.addEventListener('message', bufferIncomingMessage);
-console.debug('[multiplayer-quiz] bootstrap: buffering early postMessage events');
-
-import('https://cdn.jsdelivr.net/npm/@memizy/multiplayer-sdk@0.1.4/+esm')
-  .then(({ createMultiplayerPlugin }) => {
-    console.debug('[multiplayer-quiz] sdk imported from @memizy/multiplayer-sdk@0.1.4');
     sdk = createMultiplayerPlugin();
-    const replay = bufferedMessages.slice();
-    bufferedMessages = [];
-    window.removeEventListener('message', bufferIncomingMessage);
-    window.addEventListener('message', runtimeIncomingMessageHandler);
+
+    sdk.defineHost({
+      onInit(context) {
+        Plugin.initHost(context);
+      },
+      onPlayerJoined(player) {
+        Plugin.onPlayerJoined(player);
+      },
+      onPlayerLeft(playerId) {
+        Plugin.onPlayerLeft(playerId);
+      },
+      onPlayerAction(action, playerId) {
+        Plugin.onPlayerAction({
+          type: action?.type,
+          data: {
+            ...(action?.data ?? {}),
+            playerId: action?.data?.playerId ?? playerId,
+          },
+        });
+      },
+    });
+
+    sdk.definePlayer({
+      onInit(context) {
+        Plugin.initPlayer({
+          ...context,
+          playerId: context?.myPlayerId ?? context?.playerId,
+          playerName: context?.myPlayerName ?? context?.playerName,
+        });
+      },
+      onStateUpdate(state) {
+        Plugin.onStateUpdate(state);
+      },
+    });
 
     sdk.start();
-
-    // Replay buffered messages to the plugin runtime handler.
-    if (replay.length > 0) {
-      console.debug('[multiplayer-quiz] replaying buffered messages', replay.map(m => m.type));
-      for (const msg of replay) {
-        processIncomingPluginMessage(msg);
-      }
-    }
-  })
-  .catch((error) => {
-    console.error('Failed to load @memizy/multiplayer-sdk', error);
+    showOnly('host-waiting');
+  } catch (error) {
+    console.error('Failed to bootstrap @memizy/multiplayer-sdk', error);
     showOnly('screen-error');
     const screen = el('screen-error');
     if (screen) {
       screen.innerHTML = '<h2>Failed to load multiplayer SDK</h2><p>Please try again later.</p>';
     }
-  });
+  }
+}
 
 // ══════════════════════════════════════════════════════════
 // Game Plugin — global state & UI logic
@@ -1387,8 +1359,8 @@ const Plugin = {
   },
 };
 
-// ── Initial state: show host-waiting until MULTI_INIT arrives ──
-showOnly('host-waiting');
+// ── Bootstrap via SDK (host/player in iframe, landing page when standalone) ──
+bootstrapSdkRuntime();
 </script>
 </body>
 </html>
