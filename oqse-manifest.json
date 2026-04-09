@@ -1,71 +1,70 @@
 {
-  "$schema": "https://memizy.com/schemas/oqse-manifest/v1.0.json",
-  "version": "1.0",
-  "pluginVersion": "1.0.0",
-  "minOqseVersion": "1.0",
-  "maxOqseVersion": "1.99",
-  "id": "https://github.com/memizy/plugin-multiplayer-quiz",
-  "appName": "Multiplayer Quiz",
-  "description": "Real-time multiplayer quiz game with live leaderboard, configurable time limits, and competitive gameplay for classrooms and study groups.",
-  "author": "Memizy Team",
-  "authorUrl": "https://memizy.com",
-  "locales": ["en", "cs"],
-  "tags": ["quiz", "multiplayer", "game", "real-time", "leaderboard"],
-  "emoji": "🎮",
-  "studyMode": "game",
-  "questionDensity": "high",
-  "capabilities": {
-    "actions": ["render"],
-    "types": ["mcq-single", "mcq-multi", "true-false", "short-answer", "match-pairs"],
-    "assets": {
-      "image": ["image/jpeg", "image/png", "image/svg+xml", "image/webp"],
-      "audio": null,
-      "video": null,
-      "model": null
+    "$schema": "https://memizy.com/schemas/oqse-manifest/v1.0.json",
+    "version": "0.1",
+    "pluginVersion": "1.0.0",
+    "minOqseVersion": "0.1",
+    "maxOqseVersion": "1.99",
+    "id": "https://memizy.github.io/multiplayer-quiz/",
+    "appName": "Multiplayer Quiz",
+    "description": "Real-time multiplayer quiz game with live leaderboard, configurable time limits, and competitive gameplay for classrooms and study groups.",
+    "author": "Memizy Team",
+    "authorUrl": "https://memizy.com",
+    "locales": ["en", "cs"],
+    "tags": ["quiz", "multiplayer", "game", "real-time", "leaderboard"],
+    "emoji": "🎮",
+    "studyMode": "game",
+    "questionDensity": "high",
+    "capabilities": {
+      "actions": ["render"],
+      "types": ["mcq-single", "mcq-multi", "true-false", "short-answer", "match-pairs"],
+      "assets": {
+        "image": ["image/jpeg", "image/png", "image/svg+xml", "image/webp"],
+        "audio": null,
+        "video": null,
+        "model": null
+      },
+      "features": ["markdown", "html-safe"],
+      "itemProperties": ["explanation", "sources"],
+      "metaProperties": ["description", "author", "license"]
     },
-    "features": ["markdown", "html-safe"],
-    "itemProperties": ["explanation", "sources"],
-    "metaProperties": ["description", "author", "license"]
-  },
-  "appSpecific": {
-    "memizy": {
-      "settingsSchema": [
-        {
-          "id": "timePerQuestion",
-          "label": "Time per question (seconds)",
-          "type": "number",
-          "defaultValue": 20,
-          "description": "How long students have to answer each question",
-          "min": 5,
-          "max": 300
-        },
-        {
-          "id": "shuffleQuestions",
-          "label": "Shuffle questions",
-          "type": "boolean",
-          "defaultValue": false,
-          "description": "Randomize question order for each game"
-        },
-        {
-          "id": "autoAdvanceReveal",
-          "label": "Auto-advance after reveal (seconds)",
-          "type": "number",
-          "defaultValue": 0,
-          "description": "Automatically show next question (0 = manual advance)",
-          "min": 0,
-          "max": 60
-        },
-        {
-          "id": "showLeaderboardAfterEvery",
-          "label": "Show leaderboard every N questions (0 = never)",
-          "type": "number",
-          "defaultValue": 0,
-          "description": "Display leaderboard after every N questions",
-          "min": 0,
-          "max": 50
-        }
-      ],
-      "multiplayerProtocol": "memizy-multiplayer-sdk/v0.2"
+    "appSpecific": {
+      "memizy": {
+        "settingsSchema": [
+          {
+            "id": "timePerQuestion",
+            "label": "Time per question (seconds)",
+            "type": "number",
+            "defaultValue": 20,
+            "description": "How long students have to answer each question",
+            "min": 5,
+            "max": 300
+          },
+          {
+            "id": "shuffleQuestions",
+            "label": "Shuffle questions",
+            "type": "boolean",
+            "defaultValue": false,
+            "description": "Randomize question order for each game"
+          },
+          {
+            "id": "autoAdvanceReveal",
+            "label": "Auto-advance after reveal (seconds)",
+            "type": "number",
+            "defaultValue": 0,
+            "description": "Automatically show next question (0 = manual advance)",
+            "min": 0,
+            "max": 60
+          },
+          {
+            "id": "showLeaderboardAfterEvery",
+            "label": "Show leaderboard every N questions (0 = never)",
+            "type": "number",
+            "defaultValue": 0,
+            "description": "Display leaderboard after every N questions",
+            "min": 0,
+            "max": 50
+          }
+        ]
+      }
     }
   }
-}

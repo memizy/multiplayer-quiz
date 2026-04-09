@@ -9,11 +9,11 @@
   <script type="application/oqse-manifest+json">
   {
     "$schema": "https://memizy.com/schemas/oqse-manifest/v1.0.json",
-    "version": "1.0",
+    "version": "0.1",
     "pluginVersion": "1.0.0",
-    "minOqseVersion": "1.0",
+    "minOqseVersion": "0.1",
     "maxOqseVersion": "1.99",
-    "id": "https://github.com/memizy/plugin-multiplayer-quiz",
+    "id": "https://memizy.github.io/multiplayer-quiz/",
     "appName": "Multiplayer Quiz",
     "description": "Real-time multiplayer quiz game with live leaderboard, configurable time limits, and competitive gameplay for classrooms and study groups.",
     "author": "Memizy Team",
@@ -73,8 +73,7 @@
             "min": 0,
             "max": 50
           }
-        ],
-        "multiplayerProtocol": "memizy-multiplayer-sdk/v0.2"
+        ]
       }
     }
   }
@@ -471,9 +470,9 @@ function bufferIncomingMessage(event) {
 window.addEventListener('message', bufferIncomingMessage);
 console.debug('[multiplayer-quiz] bootstrap: buffering early postMessage events');
 
-import('https://cdn.jsdelivr.net/npm/@memizy/multiplayer-sdk@0.1.2/+esm')
+import('https://cdn.jsdelivr.net/npm/@memizy/multiplayer-sdk@0.1.4/+esm')
   .then(({ createMultiplayerPlugin }) => {
-    console.debug('[multiplayer-quiz] sdk imported from @memizy/multiplayer-sdk@0.1.2');
+    console.debug('[multiplayer-quiz] sdk imported from @memizy/multiplayer-sdk@0.1.4');
     sdk = createMultiplayerPlugin();
     const replay = bufferedMessages.slice();
     bufferedMessages = [];
