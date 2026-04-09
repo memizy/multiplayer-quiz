@@ -1,4 +1,34 @@
-# 🎮 Multiplayer Quiz – OQSE Plugin
+# Multiplayer Quiz Plugin
+
+Standalone Memizy multiplayer plugin example built around the `@memizy/multiplayer-sdk` v0.2 handshake.
+
+## What it demonstrates
+
+- `PLUGIN_READY` emitted by the plugin as soon as it boots.
+- `INIT_SESSION` received from the host with session data.
+- Legacy `MULTI_INIT` fallback for older host implementations.
+- `SYNC_PROGRESS` for bulk progress reporting.
+- Manifest data island support for standalone mode and plugin discovery.
+
+## Runtime flow
+
+1. Open the plugin in a browser or inside the Memizy host.
+2. The SDK reads the OQSE manifest from the HTML data island.
+3. The plugin announces `PLUGIN_READY`.
+4. The host responds with `INIT_SESSION`.
+5. The plugin renders the current question set and sends progress updates back to the host.
+
+## Local development
+
+This folder is intentionally single-file friendly so it can be served from GitHub Pages or copied into `/public/plugins/` for local testing.
+
+If you want to preview it standalone, open `index.html` directly or load it through the Memizy multiplayer sandbox.
+
+## Notes
+
+- Keep the data structure flat in the session payload; item fields like `question`, `front`, and `back` are expected at the item root.
+- Preserve `MULTI_INIT` handling if you need to support older host builds.
+- Update the imported SDK version together with the package release.# 🎮 Multiplayer Quiz – OQSE Plugin
 
 A real-time multiplayer quiz game for OQSE study sets. Perfect for classroom competitions and study group challenges.
 
