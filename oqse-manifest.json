@@ -1,5 +1,5 @@
 {
-    "$schema": "https://memizy.com/schemas/oqse-manifest/v1.0.json",
+    "$schema": "https://cdn.jsdelivr.net/gh/memizy/oqse-specification@main/schemas/oqse-manifest-v0.1.json",
     "version": "0.1",
     "pluginVersion": "1.0.0",
     "minOqseVersion": "0.1",
@@ -7,8 +7,10 @@
     "id": "https://memizy.github.io/multiplayer-quiz/",
     "appName": "Multiplayer Quiz",
     "description": "Real-time multiplayer quiz game with live leaderboard, configurable time limits, and competitive gameplay for classrooms and study groups.",
-    "author": "Memizy Team",
-    "authorUrl": "https://memizy.com",
+    "author": {
+      "name": "Memizy Dev Team",
+      "role": "Creator"
+    },
     "locales": ["en", "cs"],
     "tags": ["quiz", "multiplayer", "game", "real-time", "leaderboard"],
     "emoji": "🎮",
@@ -23,48 +25,23 @@
         "video": null,
         "model": null
       },
-      "features": ["markdown", "html-safe"],
-      "itemProperties": ["explanation", "sources"],
-      "metaProperties": ["description", "author", "license"]
+      "features": ["markdown"]
     },
     "appSpecific": {
       "memizy": {
-        "settingsSchema": [
-          {
-            "id": "timePerQuestion",
-            "label": "Time per question (seconds)",
-            "type": "number",
-            "defaultValue": 20,
-            "description": "How long students have to answer each question",
-            "min": 5,
-            "max": 300
+        "multiplayer": {
+          "apiVersion": "0.3",
+          "players": {
+            "min": 2,
+            "max": 60,
+            "recommended": 30
           },
-          {
-            "id": "shuffleQuestions",
-            "label": "Shuffle questions",
-            "type": "boolean",
-            "defaultValue": false,
-            "description": "Randomize question order for each game"
-          },
-          {
-            "id": "autoAdvanceReveal",
-            "label": "Auto-advance after reveal (seconds)",
-            "type": "number",
-            "defaultValue": 0,
-            "description": "Automatically show next question (0 = manual advance)",
-            "min": 0,
-            "max": 60
-          },
-          {
-            "id": "showLeaderboardAfterEvery",
-            "label": "Show leaderboard every N questions (0 = never)",
-            "type": "number",
-            "defaultValue": 0,
-            "description": "Display leaderboard after every N questions",
-            "min": 0,
-            "max": 50
-          }
-        ]
+          "supportsLateJoin": true,
+          "supportsReconnect": true,
+          "supportsTeams": false,
+          "requiresHostScreen": true,
+          "clientOrientation": "portrait"
+        }
       }
     }
   }

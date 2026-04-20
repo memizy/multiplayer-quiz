@@ -1,13 +1,13 @@
 # Multiplayer Quiz Plugin
 
-Standalone Memizy multiplayer plugin example built around the `@memizy/multiplayer-sdk` v0.2 handshake.
+Standalone Memizy multiplayer plugin example built around the `@memizy/multiplayer-sdk` v0.3 Split-Lobby lifecycle.
 
 ## What it demonstrates
 
 - `PLUGIN_READY` emitted by the plugin as soon as it boots.
 - `INIT_SESSION` received from the host with session data.
-- Legacy `MULTI_INIT` fallback for older host implementations.
-- `SYNC_PROGRESS` for bulk progress reporting.
+- `PREPARE_GAME` and `START_GAME` lifecycle events (Split-Lobby 3-phase start).
+- `MULTI_READY` support for plugin-side readiness signaling.
 - Manifest data island support for standalone mode and plugin discovery.
 
 ## Runtime flow
@@ -16,7 +16,7 @@ Standalone Memizy multiplayer plugin example built around the `@memizy/multiplay
 2. The SDK reads the OQSE manifest from the HTML data island.
 3. The plugin announces `PLUGIN_READY`.
 4. The host responds with `INIT_SESSION`.
-5. The plugin renders the current question set and sends progress updates back to the host.
+5. The host can drive `PREPARE_GAME` and `START_GAME`, and the plugin broadcasts gameplay state/actions.
 
 ## Local development
 
@@ -28,7 +28,9 @@ If you want to preview it standalone, open `index.html` directly or load it thro
 
 - Keep the data structure flat in the session payload; item fields like `question`, `front`, and `back` are expected at the item root.
 - Preserve `MULTI_INIT` handling if you need to support older host builds.
-- Update the imported SDK version together with the package release.# 🎮 Multiplayer Quiz – OQSE Plugin
+- Update the imported SDK version together with the package release.
+
+# 🎮 Multiplayer Quiz – OQSE Plugin
 
 A real-time multiplayer quiz game for OQSE study sets. Perfect for classroom competitions and study group challenges.
 
@@ -46,7 +48,7 @@ A real-time multiplayer quiz game for OQSE study sets. Perfect for classroom com
   - ⚡ Auto-advance after answer reveal
   - 📊 Periodic leaderboard display
 - **Multiple Question Types:** MCQ (single/multi), True/False, Short Answer, Matching
-- **Rich Content Support:** Markdown, HTML, images in questions
+- **Rich Content Support:** Markdown and images in questions
 - **Mobile-Friendly:** Touch-optimized for tablets and smartphones
 - **Offline-First:** Runs entirely in the browser
 
@@ -54,13 +56,13 @@ A real-time multiplayer quiz game for OQSE study sets. Perfect for classroom com
 
 ## 📋 OQSE Compatibility
 
-This plugin implements the **OQSE (Open Quiz & Study Exchange) v1.0** specification.
+This plugin implements the **OQSE (Open Quiz & Study Exchange) v0.1** specification.
 
 | Property | Value |
 |----------|-------|
-| **Manifest Version** | 1.0 |
+| **Manifest Version** | 0.1 |
 | **Plugin Version** | 1.0.0 |
-| **Min OQSE Version** | 1.0 |
+| **Min OQSE Version** | 0.1 |
 | **Max OQSE Version** | 1.99 |
 
 ### Supported Item Types
@@ -73,9 +75,7 @@ This plugin implements the **OQSE (Open Quiz & Study Exchange) v1.0** specificat
 ### Capabilities
 - **Actions:** `render` (study/game mode)
 - **Assets:** Images (JPEG, PNG, SVG, WebP)
-- **Features:** Markdown, HTML sanitization
-- **Item Properties:** Explanations, source attribution
-- **Metadata Properties:** Description, author, license
+- **Features:** Markdown
 
 ---
 
@@ -133,9 +133,9 @@ python -m http.server 8080
 The host loads this plugin in an iframe and communicates via `window.postMessage`:
 
 ```javascript
-// Host → Plugin (MULTI_INIT)
+// Host -> Plugin (INIT_SESSION)
 iframe.contentWindow.postMessage({
-  type: 'MULTI_INIT',
+  type: 'INIT_SESSION',
   role: 'host',
   context: {
     pin: 'ABCD',
@@ -166,34 +166,36 @@ window.parent.postMessage({
 
 ---
 
-## ⚙️ Settings Schema
+## ⚙️ Multiplayer Declaration (Manifest)
 
-The plugin declares a Memizy-specific settings schema in its OQSE manifest:
+The plugin declares multiplayer contract metadata in `appSpecific.memizy.multiplayer`:
 
 ```json
 {
   "appSpecific": {
     "memizy": {
-      "settingsSchema": [
-        {
-          "id": "timePerQuestion",
-          "label": "Time per question (seconds)",
-          "type": "number",
-          "defaultValue": 20,
-          "min": 5,
-          "max": 300
+      "multiplayer": {
+        "apiVersion": "0.3",
+        "players": {
+          "min": 2,
+          "max": 60,
+          "recommended": 30
         },
-        // ... more settings
-      ]
+        "supportsLateJoin": true,
+        "supportsReconnect": true,
+        "supportsTeams": false,
+        "requiresHostScreen": true,
+        "clientOrientation": "portrait"
+      }
     }
   }
 }
 ```
 
 Host applications can:
-1. Parse this schema from the manifest
-2. Render a dynamic settings form
-3. Pass configured values back in `MULTI_INIT`
+1. Read which multiplayer API contract version the plugin targets
+2. Enforce or guide lobby size via the declared players range
+3. Apply lobby/runtime behavior such as late-join, reconnect, team UI, and client orientation hints
 
 ---
 
