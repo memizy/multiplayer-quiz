@@ -202,22 +202,35 @@
     <p class="pulse">Connecting to session…</p>
   </div>
 
-  <!-- Host: Lobby — waiting for players to join -->
-  <div id="host-lobby" class="screen hidden">
-    <div style="font-size:3rem">📡</div>
-    <h1>Lobby</h1>
+  <!-- Host: Settings (runMode=host-settings) -->
+  <div id="host-settings" class="screen hidden">
+    <div style="font-size:3rem">⚙️</div>
+    <h1>Quiz Settings</h1>
     <div class="card" style="text-align:center">
-      <p style="font-size:0.8rem; color:var(--gray-400); margin-bottom:0.25rem">Room PIN</p>
+      <p style="font-size:0.8rem; color:var(--gray-400); margin-bottom:0.25rem">Session PIN</p>
       <div id="lobby-pin" style="font-size:3rem; font-weight:900; letter-spacing:0.15em; color:var(--blue)">——</div>
+    </div>
+    <div class="card" style="max-width:600px">
+      <h2 style="text-align:left; margin-bottom:0.85rem">Gameplay</h2>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:0.75rem;align-items:center">
+        <label for="setting-time-per-question" style="text-align:left">Time per question (seconds)</label>
+        <input id="setting-time-per-question" type="number" min="5" max="180" step="1" value="20" style="width:6rem;padding:0.5rem;border:2px solid var(--gray-200);border-radius:0.5rem" />
+
+        <label for="setting-leaderboard-every" style="text-align:left">Show leaderboard every N questions (0 = off)</label>
+        <input id="setting-leaderboard-every" type="number" min="0" max="20" step="1" value="0" style="width:6rem;padding:0.5rem;border:2px solid var(--gray-200);border-radius:0.5rem" />
+
+        <label for="setting-auto-advance" style="text-align:left">Auto-advance reveal/leaderboard (seconds, 0 = off)</label>
+        <input id="setting-auto-advance" type="number" min="0" max="30" step="1" value="0" style="width:6rem;padding:0.5rem;border:2px solid var(--gray-200);border-radius:0.5rem" />
+
+        <label for="setting-shuffle-questions" style="text-align:left">Shuffle questions</label>
+        <input id="setting-shuffle-questions" type="checkbox" style="width:1.1rem;height:1.1rem;justify-self:start" />
+      </div>
     </div>
     <div style="width:100%; max-width:600px">
       <p style="font-size:0.85rem; color:var(--gray-400); margin-bottom:0.5rem"><strong id="lobby-player-count">0</strong> players joined</p>
       <ul id="lobby-player-list" class="player-list"></ul>
     </div>
-    <div style="display:flex; gap:0.75rem; width:100%; max-width:600px">
-      <button id="btn-start" class="btn btn-green btn-full" onclick="Plugin.hostStart()" disabled>🚀 Launch Mission</button>
-    </div>
-    <p class="subtitle">Share the PIN with your students. Press Launch when ready.</p>
+    <p class="subtitle">Use the Memizy host controls to continue through Prepare and Start.</p>
   </div>
 
   <!-- Host: Question view -->
@@ -403,6 +416,12 @@ async function bootstrapSdkRuntime() {
       onInit(context) {
         Plugin.initHost(context);
       },
+      onPrepareGame(players) {
+        Plugin.onHostPrepareGame(players);
+      },
+      onStartGame() {
+        Plugin.onHostStartGame();
+      },
       onPlayerJoined(player) {
         Plugin.onPlayerJoined(player);
       },
@@ -428,13 +447,18 @@ async function bootstrapSdkRuntime() {
           playerName: context?.myPlayerName ?? context?.playerName,
         });
       },
+      onPrepareGame(players) {
+        Plugin.onPlayerPrepareGame(players);
+      },
+      onStartGame() {
+        Plugin.onPlayerStartGame();
+      },
       onStateUpdate(state) {
         Plugin.onStateUpdate(state);
       },
     });
 
     sdk.start();
-    showOnly('host-waiting');
   } catch (error) {
     console.error('Failed to bootstrap @memizy/multiplayer-sdk', error);
     showOnly('screen-error');
@@ -452,8 +476,11 @@ async function bootstrapSdkRuntime() {
 let pin = '';
 let playerName = '';
 let myPlayerId = '';
+let hostRunMode = 'host-game';
+let playerRunMode = 'client-game';
 
 // HOST state
+let hostBaseItems = [];    // Unmodified filtered item set
 let hostItems = [];        // OQSE items (questions)
 let hostPlayers = {};      // { [playerId]: { id, name, score, answeredThisRound } }
 let hostAnswers = {};      // { [playerId]: { data, timeTakenMs } } for current question
@@ -476,7 +503,7 @@ function el(id) { return document.getElementById(id); }
 
 function showOnly(...ids) {
   const all = [
-    'host-waiting','host-lobby','host-question','host-reveal','host-leaderboard','host-finished',
+    'host-waiting','host-settings','host-question','host-reveal','host-leaderboard','host-finished',
     'player-waiting','player-question','player-answered','player-result','player-leaderboard','player-finished',
     'screen-error'
   ];
@@ -641,6 +668,7 @@ const Plugin = {
   // ── Initialisation ──────────────────────────────────────
 
   initHost(payload) {
+    hostRunMode = payload?.runMode ?? 'host-game';
     pin = payload.pin ?? payload.sessionPin ?? '';
 
     // Consume settings from HostPage
@@ -656,8 +684,8 @@ const Plugin = {
       const t = item?.type;
       return SUPPORTED.includes(t) || Array.isArray(item?.options) || Array.isArray(item?.choices) || item?.front;
     });
-    if (hostSettings.shuffleQuestions) items = shuffleArray(items);
-    hostItems = items;
+    hostBaseItems = items;
+    hostItems = hostSettings.shuffleQuestions ? shuffleArray(hostBaseItems) : [...hostBaseItems];
 
     hostPlayers = {};
     (payload.players ?? []).forEach(p => {
@@ -666,15 +694,54 @@ const Plugin = {
     hostQIndex = 0;
 
     el('lobby-pin').textContent = pin || '——';
+    this._syncSettingsFormFromState();
     this._refreshLobbyPlayers();
-    el('btn-start').disabled = hostItems.length === 0;
-    const subtitle = document.querySelector('#host-lobby .subtitle');
+    const subtitle = document.querySelector('#host-settings .subtitle');
     if (subtitle) {
       subtitle.textContent = hostItems.length > 0
-        ? `${hostItems.length} questions loaded. Share the PIN with your students.`
+        ? `${hostItems.length} questions loaded. Continue from the Memizy host flow.`
         : '⚠️ No supported questions found in this set.';
     }
-    showOnly('host-lobby');
+
+    if (hostRunMode === 'host-settings') {
+      showOnly('host-settings');
+      el('host-hud').classList.add('hidden');
+    } else {
+      showOnly('host-waiting');
+      const hostWaiting = el('host-waiting');
+      if (hostWaiting) {
+        hostWaiting.querySelector('p').textContent = 'Waiting for Prepare/Start from Memizy host…';
+      }
+      el('host-hud').classList.add('hidden');
+    }
+  },
+
+  onHostPrepareGame(players) {
+    const currentScores = hostPlayers;
+    hostPlayers = {};
+    (players ?? []).forEach(p => {
+      const previous = currentScores[p.id];
+      hostPlayers[p.id] = {
+        ...p,
+        score: previous?.score ?? p.score ?? 0,
+        answeredThisRound: false,
+      };
+    });
+
+    // Final pre-start calculations/prep.
+    hostItems = hostSettings.shuffleQuestions ? shuffleArray(hostBaseItems) : [...hostBaseItems];
+    this._refreshLobbyPlayers();
+    el('hud-player-count').textContent = `${Object.keys(hostPlayers).length} players`;
+
+    if (typeof sdk?.postReadyToStart === 'function') {
+      sdk.postReadyToStart();
+    }
+  },
+
+  onHostStartGame() {
+    this._syncSettingsStateFromForm();
+    hostItems = hostSettings.shuffleQuestions ? shuffleArray(hostBaseItems) : [...hostBaseItems];
+    this.hostStart();
   },
 
   // ── Player lifecycle (host side) ─────────────────────────
@@ -683,7 +750,6 @@ const Plugin = {
     hostPlayers[player.id] = { ...player, score: player.score ?? 0, answeredThisRound: false };
     this._refreshLobbyPlayers();
     el('hud-player-count').textContent = `${Object.keys(hostPlayers).length} players`;
-    el('btn-start').disabled = hostItems.length === 0;
   },
 
   onPlayerLeft(playerId) {
@@ -1057,11 +1123,34 @@ const Plugin = {
     if (hostAutoAdvanceInterval) { clearInterval(hostAutoAdvanceInterval); hostAutoAdvanceInterval = null; }
   },
 
+  _syncSettingsFormFromState() {
+    const timeEl = el('setting-time-per-question');
+    const lbEl = el('setting-leaderboard-every');
+    const autoEl = el('setting-auto-advance');
+    const shuffleEl = el('setting-shuffle-questions');
+    if (timeEl) timeEl.value = String(hostSettings.timePerQuestion ?? 20);
+    if (lbEl) lbEl.value = String(hostSettings.showLeaderboardAfterEvery ?? 0);
+    if (autoEl) autoEl.value = String(hostSettings.autoAdvanceReveal ?? 0);
+    if (shuffleEl) shuffleEl.checked = Boolean(hostSettings.shuffleQuestions);
+  },
+
+  _syncSettingsStateFromForm() {
+    const timeEl = el('setting-time-per-question');
+    const lbEl = el('setting-leaderboard-every');
+    const autoEl = el('setting-auto-advance');
+    const shuffleEl = el('setting-shuffle-questions');
+    hostSettings.timePerQuestion = Math.max(5, Number(timeEl?.value) || hostSettings.timePerQuestion || 20);
+    hostSettings.showLeaderboardAfterEvery = Math.max(0, Number(lbEl?.value) || 0);
+    hostSettings.autoAdvanceReveal = Math.max(0, Number(autoEl?.value) || 0);
+    hostSettings.shuffleQuestions = Boolean(shuffleEl?.checked);
+  },
+
   // ══════════════════════════════════════════════════════════
   // PLAYER LOGIC
   // ══════════════════════════════════════════════════════════
 
   initPlayer(payload) {
+    playerRunMode = payload?.runMode ?? 'client-game';
     pin = payload.pin ?? payload.sessionPin ?? '';
     playerName = payload.playerName ?? 'Player';
     myPlayerId = payload.playerId ?? '';
@@ -1071,6 +1160,29 @@ const Plugin = {
     el('player-pin-display').textContent = pin;
     el('player-count-display').textContent = `${(payload.players ?? []).length} players in lobby`;
     showOnly('player-waiting');
+  },
+
+  onPlayerPrepareGame(players) {
+    const count = (players ?? []).length;
+    const playerCount = el('player-count-display');
+    if (playerCount) playerCount.textContent = `${count} players in session`;
+    if (typeof sdk?.postReadyToStart === 'function') {
+      sdk.postReadyToStart();
+    }
+  },
+
+  onPlayerStartGame() {
+    if (playerRunMode === 'client-game') {
+      el('player-q-num').textContent = 'Get ready';
+      el('player-q-text').textContent = 'Host started the game. First question incoming...';
+      el('player-progress').style.width = '0%';
+      el('player-answers').innerHTML = '<button class="btn btn-ghost btn-full" disabled>Waiting for first question…</button>';
+      el('player-answers').classList.remove('hidden');
+      el('player-short-answer').classList.add('hidden');
+      el('player-match-pairs').classList.add('hidden');
+      el('player-timer').textContent = '--';
+      showOnly('player-question');
+    }
   },
 
   onStateUpdate(state) {
