@@ -393,7 +393,7 @@ async function bootstrapSdkRuntime() {
       createMultiplayerPlugin,
       loadManifestFromDataIsland,
       renderLandingPageIfNeeded,
-    } = await import('https://cdn.jsdelivr.net/npm/@memizy/multiplayer-sdk@0.3.0/+esm');
+    } = await import('https://cdn.jsdelivr.net/npm/@memizy/multiplayer-sdk@0.3.1/+esm');
 
     const manifest = typeof loadManifestFromDataIsland === 'function'
       ? loadManifestFromDataIsland()
