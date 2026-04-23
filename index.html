@@ -15,8 +15,11 @@
     "id": "https://memizy.github.io/multiplayer-quiz/",
     "appName": "Multiplayer Quiz",
     "description": "Simple multiplayer quiz with mcq-single support.",
-    "author": "Memizy Team",
-    "authorUrl": "https://memizy.com",
+    "author": {
+      "name": "Memizy Team",
+      "role": "Creator",
+      "url": "https://memizy.com"
+    },
     "locales": ["en"],
     "tags": ["quiz", "multiplayer", "game"],
     "emoji": "🎮",
@@ -26,7 +29,11 @@
       "actions": ["render"],
       "types": ["mcq-single", "true-false"],
       "assets": { "image": null, "audio": null, "video": null, "model": null },
-      "features": []
+      "features": [
+        "math",
+        "markdown",
+        "html"
+      ]
     },
     "appSpecific": {
       "memizy": {
@@ -40,6 +47,20 @@
           "clientOrientation": "portrait"
         }
       }
+    }
+  }
+  </script>
+
+  <link rel="stylesheet" href="https://esm.sh/katex@0.16/dist/katex.min.css">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "dompurify": "https://esm.sh/dompurify@3",
+      "marked": "https://esm.sh/marked@12",
+      "katex": "https://esm.sh/katex@0.16",
+      "marked-katex-extension": "https://esm.sh/marked-katex-extension@5",
+      "@memizy/multiplayer-sdk": "https://esm.sh/@memizy/multiplayer-sdk@0.4.0"
     }
   }
   </script>
@@ -70,7 +91,17 @@
     .leaderboard { display: flex; flex-direction: column; gap: 8px; }
     .lb-row { background: #fff; border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
     label { font-size: 14px; color: #475569; }
-    input[type="number"] { width: 110px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    input[type="number"], input[type="text"], select { width: 180px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    .full-input { width: 100%; }
+    .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .check-item { display: flex; align-items: center; gap: 8px; background: #e2e8f0; border-radius: 8px; padding: 10px; }
+    .pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center; margin-bottom: 8px; }
+    .pair-left { background: #e2e8f0; border-radius: 8px; padding: 10px; font-weight: 600; }
+    .submit-wrap { display: flex; justify-content: center; margin-top: 10px; }
+    .prompt-html :first-child { margin-top: 0; }
+    .prompt-html :last-child { margin-bottom: 0; }
+    .prompt-html img { max-width: 100%; height: auto; border-radius: 8px; }
+    .prompt-html .katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; }
   </style>
 </head>
 <body>
@@ -83,10 +114,17 @@
     <section id="host-settings" class="screen">
       <h1>Host Settings</h1>
       <div class="card col">
-        <h2 id="host-pin">----</h2>
         <div class="row">
           <label for="setting-timer">Seconds/question</label>
           <input id="setting-timer" type="number" min="5" max="120" value="20" />
+        </div>
+        <div class="row">
+          <label for="setting-reveal-duration">Reveal duration (seconds)</label>
+          <input id="setting-reveal-duration" type="number" min="2" value="5" />
+        </div>
+        <div class="row">
+          <label for="setting-leaderboard-duration">Leaderboard duration (seconds)</label>
+          <input id="setting-leaderboard-duration" type="number" min="0" value="5" />
         </div>
         <div class="row">
           <label for="setting-shuffle">Shuffle questions</label>
@@ -112,7 +150,6 @@
       <div class="card"><h2 id="host-reveal-text">Question text</h2></div>
       <div id="host-reveal-choices" class="answer-grid"></div>
       <div class="row center">
-        <button id="host-next-btn" class="btn">Next</button>
         <button id="host-end-btn" class="btn btn-secondary">End Game</button>
       </div>
     </section>
@@ -156,10 +193,15 @@
   </div>
 
   <script type="module">
-    import { MemizyMultiplayerSDK } from 'https://esm.sh/@memizy/multiplayer-sdk@0.4.0';
+    import { MemizyMultiplayerSDK } from '@memizy/multiplayer-sdk';
+    import DOMPurify from 'dompurify';
+    import { marked } from 'marked';
+    import markedKatex from 'marked-katex-extension';
+
+    marked.use(markedKatex({ throwOnError: false }));
 
     const sdk = new MemizyMultiplayerSDK({ id: 'multiplayer-quiz', version: '1.0.0' });
-    const host = { init: null, ready: new Set(), started: false, timerId: null };
+    const host = { init: null, ready: new Set(), started: false, timerId: null, flowToken: 0 };
     const player = { myId: '' };
 
     const SCREEN_IDS = [
@@ -172,7 +214,15 @@
       SCREEN_IDS.forEach((sid) => el(sid)?.classList.remove('active'));
       el(id)?.classList.add('active');
     }
-    function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function esc(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
     function shuffle(arr) {
       const out = [...arr];
       for (let i = out.length - 1; i > 0; i--) {
@@ -181,25 +231,121 @@
       }
       return out;
     }
-    function getQuestionText(item) {
-      return item?.question ?? item?.statement ?? item?.front ?? item?.text ?? 'Question';
+    function getPromptHtml(item) {
+      const rawText = item?.question || item?.text || '';
+      return sdk.text.renderHtml(rawText, {
+        markdownParser: (text) => marked.parse(text),
+        sanitizer: (html) => DOMPurify.sanitize(html),
+        requirements: { features: ['markdown', 'latex'] },
+      });
+    }
+    function getItemType(item) {
+      if (!item) return 'mcq-single';
+      if (item.type === 'true-false') return 'true-false';
+      if (item.type === 'mcq-multi') return 'mcq-multi';
+      if (item.type === 'short-answer') return 'short-answer';
+      if (item.type === 'match-pairs') return 'match-pairs';
+      return 'mcq-single';
     }
     function getChoices(item) {
-      if (!item) return [];
-      if (item.type === 'true-false') return ['True', 'False'];
-      if (Array.isArray(item.options)) return item.options.map((o) => typeof o === 'string' ? o : (o?.text ?? o?.label ?? String(o)));
-      if (Array.isArray(item.choices)) return item.choices.map((c) => c?.text ?? String(c));
+      const type = getItemType(item);
+      if (type === 'true-false') return ['True', 'False'];
+      if (Array.isArray(item?.options)) return item.options.map((o) => typeof o === 'string' ? o : (o?.text ?? o?.label ?? String(o)));
+      if (Array.isArray(item?.choices)) return item.choices.map((c) => c?.text ?? c?.label ?? String(c));
       return [];
     }
     function getCorrectIndex(item) {
       if (!item) return 0;
-      if (item.type === 'true-false') return item.isTrue === true || item.answer === true ? 0 : 1;
+      const choices = item.options ?? item.choices;
+      if (getItemType(item) === 'true-false') return item.isTrue === true || item.answer === true ? 0 : 1;
       if (typeof item.correctIndex === 'number') return item.correctIndex;
-      if (Array.isArray(item.choices)) {
-        const idx = item.choices.findIndex((c) => c?.isCorrect === true);
+      if (Array.isArray(choices)) {
+        const idx = choices.findIndex((c) => c?.isCorrect === true);
         if (idx >= 0) return idx;
       }
       return 0;
+    }
+    function getCorrectIndices(item) {
+      const choices = item?.options ?? item?.choices;
+      if (!Array.isArray(choices)) return [];
+      return choices.map((choice, idx) => (choice?.isCorrect === true ? idx : -1)).filter((idx) => idx >= 0);
+    }
+    function normalizeText(value) {
+      return String(value ?? '').trim().toLowerCase();
+    }
+    function getMatchPairs(item) {
+      if (!Array.isArray(item?.pairs)) return [];
+      return item.pairs.map((pair) => {
+        if (Array.isArray(pair)) {
+          return { left: String(pair[0] ?? ''), right: String(pair[1] ?? '') };
+        }
+        return { left: String(pair?.left ?? pair?.a ?? ''), right: String(pair?.right ?? pair?.b ?? '') };
+      });
+    }
+    function normalizeSubmittedPairs(pairs) {
+      if (!Array.isArray(pairs)) return [];
+      return pairs.map((pair) => {
+        if (Array.isArray(pair)) return { left: String(pair[0] ?? ''), right: String(pair[1] ?? '') };
+        return { left: String(pair?.left ?? ''), right: String(pair?.right ?? '') };
+      });
+    }
+    function arraysEqual(a, b) {
+      if (a.length !== b.length) return false;
+      return a.every((v, i) => v === b[i]);
+    }
+    function isCorrectAnswer(item, answerData) {
+      const type = getItemType(item);
+      if (type === 'mcq-single' || type === 'true-false') {
+        return Number(answerData?.optionIndex) === getCorrectIndex(item);
+      }
+      if (type === 'mcq-multi') {
+        const expected = getCorrectIndices(item).slice().sort((a, b) => a - b);
+        const submitted = Array.isArray(answerData?.selectedIndices)
+          ? answerData.selectedIndices.map((v) => Number(v)).filter((v) => Number.isInteger(v)).sort((a, b) => a - b)
+          : [];
+        return arraysEqual(expected, submitted);
+      }
+      if (type === 'short-answer') {
+        const submitted = normalizeText(answerData?.text);
+        const answers = Array.isArray(item?.answers) ? item.answers.map((a) => normalizeText(a)) : [];
+        return submitted.length > 0 && answers.includes(submitted);
+      }
+      if (type === 'match-pairs') {
+        const expectedPairs = getMatchPairs(item);
+        const submittedPairs = normalizeSubmittedPairs(answerData?.pairs);
+        if (expectedPairs.length !== submittedPairs.length) return false;
+        return expectedPairs.every((pair, idx) => pair.left === submittedPairs[idx].left && pair.right === submittedPairs[idx].right);
+      }
+      return false;
+    }
+    function getRevealMarkup(item, reveal) {
+      const type = getItemType(item);
+      if (type === 'mcq-single' || type === 'true-false') {
+        const choices = getChoices(item);
+        const correctIndex = reveal?.correctIndex ?? 0;
+        return choices.map((choice, idx) =>
+          `<button class="answer-btn" disabled style="${idx === correctIndex ? 'outline:3px solid #fff;' : 'opacity:0.5;'}">${esc(choice)}</button>`
+        ).join('');
+      }
+      if (type === 'mcq-multi') {
+        const choices = getChoices(item);
+        const correctSet = new Set(reveal?.correctIndices ?? []);
+        return choices.map((choice, idx) =>
+          `<button class="answer-btn" disabled style="${correctSet.has(idx) ? 'outline:3px solid #fff;' : 'opacity:0.5;'}">${esc(choice)}</button>`
+        ).join('');
+      }
+      if (type === 'short-answer') {
+        const answers = Array.isArray(item?.answers) ? item.answers : [];
+        const answerLabel = answers.length > 0 ? answers.map((answer) => esc(answer)).join(', ') : 'No answer configured';
+        return `<div class="card"><p><strong>Accepted answers:</strong> ${answerLabel}</p></div>`;
+      }
+      if (type === 'match-pairs') {
+        const pairs = getMatchPairs(item);
+        return `<div class="card">${pairs.map((pair) =>
+          `<div class="pair-row"><div class="pair-left">${esc(pair.left)}</div><div>${esc(pair.right)}</div></div>`
+        ).join('')}</div>`;
+      }
+      return '';
     }
     function buildRows(scores) {
       return sdk.room.getPlayers()
@@ -212,8 +358,10 @@
     }
     async function pushSettings() {
       const timerSec = Math.max(5, Number(el('setting-timer').value || 20));
+      const revealDuration = Math.max(2, Number(el('setting-reveal-duration').value || 5));
+      const leaderboardDuration = Math.max(0, Number(el('setting-leaderboard-duration').value || 5));
       const shuffleQuestions = Boolean(el('setting-shuffle').checked);
-      await sdk.settings.set({ timerSec, shuffleQuestions });
+      await sdk.settings.set({ timerSec, revealDuration, leaderboardDuration, shuffleQuestions });
       await sdk.settings.setValid(true);
     }
     function stopTimer() {
@@ -221,6 +369,7 @@
         clearInterval(host.timerId);
         host.timerId = null;
       }
+      host.flowToken += 1;
     }
 
     async function showHostQuestion(index) {
@@ -253,13 +402,16 @@
       if (!state || state.phase !== 'question') return;
       stopTimer();
       const item = state.items[state.currentIndex];
+      const type = getItemType(item);
       const correctIndex = getCorrectIndex(item);
+      const correctIndices = getCorrectIndices(item);
       await sdk.host.updateState((draft) => {
         draft.phase = 'reveal';
-        draft.reveal = { correctIndex, results: {} };
+        draft.reveal = { correctIndex, correctIndices, results: {} };
         draft.lastScoreDelta = {};
         Object.keys(draft.answers).forEach((pid) => {
-          const correct = Number(draft.answers[pid]?.optionIndex) === correctIndex;
+          const answer = draft.answers[pid] ?? {};
+          const correct = isCorrectAnswer(item, answer);
           draft.reveal.results[pid] = { correct };
           if (correct) {
             draft.scores[pid] = (draft.scores[pid] ?? 0) + 100;
@@ -270,6 +422,19 @@
         });
       });
       renderHost(sdk.host.getState());
+      const revealMs = Math.max(2, Number(state.revealDuration ?? 5)) * 1000;
+      const leaderboardMs = Math.max(0, Number(state.leaderboardDuration ?? 5)) * 1000;
+      const flowToken = host.flowToken + 1;
+      host.flowToken = flowToken;
+      await delay(revealMs);
+      if (host.flowToken !== flowToken) return;
+      if (leaderboardMs > 0) {
+        await sdk.host.updateState((draft) => { draft.phase = 'leaderboard'; });
+        renderHost(sdk.host.getState());
+        await delay(leaderboardMs);
+        if (host.flowToken !== flowToken) return;
+      }
+      await hostNext();
     }
 
     async function hostNext() {
@@ -290,11 +455,11 @@
       await sdk.host.endGame({ scores });
     }
 
-    async function submitAnswer(optionIndex) {
+    async function submitAnswer(data) {
       const state = sdk.player.state;
       if (!state || state.phase !== 'question') return;
       if (state.answers?.[player.myId]) return;
-      await sdk.player.sendAction('answer', { optionIndex });
+      await sdk.player.sendAction('answer', data);
     }
 
     function renderHost(state) {
@@ -307,18 +472,32 @@
       if (state.phase === 'question') {
         showScreen('host-question');
         el('host-q-title').textContent = `Question ${state.currentIndex + 1} / ${state.items.length}`;
-        el('host-q-text').textContent = getQuestionText(item);
-        el('host-q-choices').innerHTML = getChoices(item).map((c) => `<button class="answer-btn" disabled>${esc(c)}</button>`).join('');
+        el('host-q-text').innerHTML = `<div class="prompt-html">${getPromptHtml(item)}</div>`;
+        const type = getItemType(item);
+        if (type === 'mcq-single' || type === 'true-false' || type === 'mcq-multi') {
+          el('host-q-choices').innerHTML = getChoices(item).map((choice) => `<button class="answer-btn" disabled>${esc(choice)}</button>`).join('');
+        } else if (type === 'short-answer') {
+          el('host-q-choices').innerHTML = '<div class="card"><p>Players submit a free text answer.</p></div>';
+        } else if (type === 'match-pairs') {
+          el('host-q-choices').innerHTML = '<div class="card"><p>Players submit left/right matches.</p></div>';
+        } else {
+          el('host-q-choices').innerHTML = '';
+        }
       }
 
-      if (state.phase === 'reveal') {
+      if (state.phase === 'reveal' || state.phase === 'leaderboard') {
         showScreen('host-reveal');
-        const correctIndex = state.reveal?.correctIndex ?? 0;
+        if (state.phase === 'leaderboard') {
+          el('host-reveal-title').textContent = 'Leaderboard';
+          el('host-reveal-text').innerHTML = '<div class="prompt-html">Round standings</div>';
+          el('host-reveal-choices').innerHTML = `<div class="leaderboard">${buildRows(state.scores ?? {}).map((row, idx) =>
+            `<div class="lb-row"><span>${idx + 1}. ${esc(row.name)}</span><strong>${row.score}</strong></div>`
+          ).join('')}</div>`;
+          return;
+        }
         el('host-reveal-title').textContent = `Reveal ${state.currentIndex + 1} / ${state.items.length}`;
-        el('host-reveal-text').textContent = getQuestionText(item);
-        el('host-reveal-choices').innerHTML = getChoices(item).map((c, i) =>
-          `<button class="answer-btn" disabled style="${i === correctIndex ? 'outline:3px solid #fff;' : 'opacity:0.5;'}">${esc(c)}</button>`
-        ).join('');
+        el('host-reveal-text').innerHTML = `<div class="prompt-html">${getPromptHtml(item)}</div>`;
+        el('host-reveal-choices').innerHTML = getRevealMarkup(item, state.reveal);
       }
     }
 
@@ -332,16 +511,70 @@
         }
         showScreen('player-question');
         el('player-q-title').textContent = `Question ${state.currentIndex + 1} / ${state.items.length}`;
-        el('player-q-text').textContent = getQuestionText(item);
+        el('player-q-text').innerHTML = `<div class="prompt-html">${getPromptHtml(item)}</div>`;
         el('player-time').textContent = String(state.timeRemaining ?? 0);
-        el('player-q-choices').innerHTML = getChoices(item).map((c, i) =>
-          `<button class="answer-btn" data-idx="${i}">${esc(c)}</button>`
-        ).join('');
-        el('player-q-choices').querySelectorAll('button').forEach((btn) => {
-          btn.addEventListener('click', async () => {
-            await submitAnswer(Number(btn.getAttribute('data-idx')));
+        const type = getItemType(item);
+        if (type === 'mcq-single' || type === 'true-false') {
+          el('player-q-choices').innerHTML = getChoices(item).map((choice, idx) =>
+            `<button class="answer-btn" data-idx="${idx}">${esc(choice)}</button>`
+          ).join('');
+          el('player-q-choices').querySelectorAll('button').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              await submitAnswer({ optionIndex: Number(btn.getAttribute('data-idx')) });
+            });
           });
-        });
+        } else if (type === 'mcq-multi') {
+          const choices = getChoices(item);
+          el('player-q-choices').innerHTML = `
+            <div class="check-grid">
+              ${choices.map((choice, idx) =>
+                `<label class="check-item"><input type="checkbox" data-idx="${idx}" /> ${esc(choice)}</label>`
+              ).join('')}
+            </div>
+            <div class="submit-wrap"><button id="player-submit-multi" class="btn">Submit</button></div>
+          `;
+          el('player-submit-multi').addEventListener('click', async () => {
+            const selectedIndices = Array.from(el('player-q-choices').querySelectorAll('input[type="checkbox"]:checked'))
+              .map((checkbox) => Number(checkbox.getAttribute('data-idx')))
+              .filter((idx) => Number.isInteger(idx));
+            await submitAnswer({ selectedIndices });
+          });
+        } else if (type === 'short-answer') {
+          el('player-q-choices').innerHTML = `
+            <div class="col">
+              <input id="player-short-answer" type="text" class="full-input" placeholder="Type your answer" />
+              <div class="submit-wrap"><button id="player-submit-short" class="btn">Submit</button></div>
+            </div>
+          `;
+          el('player-submit-short').addEventListener('click', async () => {
+            const text = el('player-short-answer').value ?? '';
+            await submitAnswer({ text });
+          });
+        } else if (type === 'match-pairs') {
+          const pairs = getMatchPairs(item);
+          const leftItems = pairs.map((pair) => pair.left);
+          const rightItems = pairs.map((pair) => pair.right);
+          el('player-q-choices').innerHTML = `
+            <div class="col">
+              ${leftItems.map((left, idx) =>
+                `<div class="pair-row"><div class="pair-left">${esc(left)}</div><select data-left="${idx}">${rightItems.map((right, rightIdx) =>
+                  `<option value="${rightIdx}">${esc(right)}</option>`
+                ).join('')}</select></div>`
+              ).join('')}
+              <div class="submit-wrap"><button id="player-submit-pairs" class="btn">Submit</button></div>
+            </div>
+          `;
+          el('player-submit-pairs').addEventListener('click', async () => {
+            const selectedPairs = leftItems.map((left, idx) => {
+              const select = el('player-q-choices').querySelector(`select[data-left="${idx}"]`);
+              const rightIdx = Number(select?.value ?? 0);
+              return { left, right: rightItems[rightIdx] ?? '' };
+            });
+            await submitAnswer({ pairs: selectedPairs });
+          });
+        } else {
+          el('player-q-choices').innerHTML = '';
+        }
       }
       if (state.phase === 'reveal') {
         showScreen('player-reveal');
@@ -350,18 +583,27 @@
         el('player-result').textContent = correct ? 'Correct!' : 'Incorrect';
         el('player-score-msg').textContent = correct ? `+${delta} points` : 'No points this round';
       }
+      if (state.phase === 'leaderboard') {
+        showScreen('player-reveal');
+        el('player-result').textContent = 'Leaderboard';
+        const rows = buildRows(state.scores ?? {});
+        const myRow = rows.find((row) => row.id === player.myId);
+        el('player-score-msg').textContent = myRow
+          ? `Your score: ${myRow.score}`
+          : 'Round standings are updating...';
+      }
     }
 
     el('setting-timer').addEventListener('change', async () => { await pushSettings(); });
+    el('setting-reveal-duration').addEventListener('change', async () => { await pushSettings(); });
+    el('setting-leaderboard-duration').addEventListener('change', async () => { await pushSettings(); });
     el('setting-shuffle').addEventListener('change', async () => { await pushSettings(); });
     el('host-reveal-btn').addEventListener('click', async () => { await revealQuestion(); });
-    el('host-next-btn').addEventListener('click', async () => { await hostNext(); });
     el('host-end-btn').addEventListener('click', async () => { await forceEndGame(); });
 
     sdk.onInit(async (init) => {
       if (init.role === 'host') {
         host.init = init;
-        el('host-pin').textContent = init.pin ?? '----';
         showScreen('host-settings');
         await pushSettings();
         await sdk.room.hostReady();
@@ -378,9 +620,12 @@
       await pushSettings();
       const settings = sdk.settings.get() ?? {};
       const timerSec = Math.max(5, Number(settings.timerSec ?? 20));
+      const revealDuration = Math.max(2, Number(settings.revealDuration ?? 5));
+      const leaderboardDuration = Math.max(0, Number(settings.leaderboardDuration ?? 5));
       const shuffleQuestions = Boolean(settings.shuffleQuestions);
       const sourceItems = host.init?.items ?? [];
-      const items = sourceItems.filter((i) => i?.type === 'mcq-single' || i?.type === 'true-false' || Array.isArray(i?.options));
+      const supportedTypes = new Set(['mcq-single', 'true-false', 'mcq-multi', 'short-answer', 'match-pairs']);
+      const items = sourceItems.filter((item) => supportedTypes.has(getItemType(item)));
       const activeItems = shuffleQuestions ? shuffle(items) : items.slice();
       const scores = {};
       sdk.room.getPlayers().forEach((p) => { scores[p.id] = 0; });
@@ -393,6 +638,8 @@
         currentIndex: 0,
         timerSec,
         timeRemaining: timerSec,
+        revealDuration,
+        leaderboardDuration,
         items: activeItems,
         answers: {},
         scores,
@@ -421,7 +668,17 @@
       const state = sdk.host.getState();
       if (!state || state.phase !== 'question') return;
       if (state.answers?.[playerId]) return;
-      await sdk.host.updateState((draft) => { draft.answers[playerId] = action.data ?? {}; });
+      const item = state.items[state.currentIndex];
+      const type = getItemType(item);
+      const data = action.data ?? {};
+      const isValidPayload =
+        (type === 'mcq-single' || type === 'true-false') ? Number.isInteger(Number(data.optionIndex))
+          : type === 'mcq-multi' ? Array.isArray(data.selectedIndices)
+            : type === 'short-answer' ? typeof data.text === 'string'
+              : type === 'match-pairs' ? Array.isArray(data.pairs)
+                : false;
+      if (!isValidPayload) return;
+      await sdk.host.updateState((draft) => { draft.answers[playerId] = data; });
       renderHost(sdk.host.getState());
       const answered = Object.keys(sdk.host.getState()?.answers ?? {}).length;
       const total = sdk.room.getPlayers().length;
