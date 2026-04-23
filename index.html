@@ -75,12 +75,16 @@
     .row { display: flex; align-items: center; gap: 10px; }
     .row.center { justify-content: center; }
     .col { display: flex; flex-direction: column; gap: 10px; }
+    .screen-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .screen-header h2 { margin: 0; text-align: left; }
     h1, h2, p { text-align: center; }
     p { color: #475569; }
     .muted { font-size: 14px; color: #64748b; }
     .btn { border: 0; padding: 10px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; background: #2563eb; color: #fff; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-secondary { background: #475569; }
+    .btn-danger { background: #b91c1c; }
+    .btn-small { padding: 6px 10px; font-size: 13px; border-radius: 8px; }
     .answer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .answer-btn { border: 0; color: #fff; border-radius: 10px; padding: 14px; font-size: 16px; font-weight: 700; text-align: left; cursor: pointer; }
     .answer-btn:nth-child(1) { background: #ef4444; }
@@ -135,7 +139,10 @@
     </section>
 
     <section id="host-question" class="screen">
-      <h2 id="host-q-title">Question</h2>
+      <div class="screen-header">
+        <h2 id="host-q-title">Question</h2>
+        <button id="host-end-btn-question" class="btn btn-danger btn-small">End Game</button>
+      </div>
       <div class="card"><h2 id="host-q-text">Question text</h2></div>
       <div id="host-q-choices" class="answer-grid"></div>
       <div class="row center">
@@ -146,17 +153,21 @@
     </section>
 
     <section id="host-reveal" class="screen">
-      <h2 id="host-reveal-title">Reveal</h2>
-      <div class="card"><h2 id="host-reveal-text">Question text</h2></div>
-      <div id="host-reveal-choices" class="answer-grid"></div>
-      <div class="row center">
-        <button id="host-end-btn" class="btn btn-secondary">End Game</button>
+      <div class="screen-header">
+        <h2 id="host-reveal-title">Reveal</h2>
+        <button id="host-end-btn-reveal" class="btn btn-danger btn-small">End Game</button>
       </div>
+      <div class="card"><h2 id="host-reveal-text">Question text</h2></div>
+      <p>Next question in: <strong id="host-reveal-time">0</strong>s</p>
+      <div id="host-reveal-choices" class="answer-grid"></div>
     </section>
 
     <section id="host-finished" class="screen">
       <h1>Game Finished</h1>
       <div id="host-final-board" class="leaderboard"></div>
+      <div class="row center">
+        <button id="host-close-room-btn" class="btn btn-secondary">Close Room</button>
+      </div>
     </section>
 
     <section id="player-waiting" class="screen">
@@ -179,6 +190,7 @@
     <section id="player-reveal" class="screen">
       <h1 id="player-result">Result</h1>
       <p id="player-score-msg"></p>
+      <p>Next question in: <strong id="player-reveal-time">0</strong>s</p>
     </section>
 
     <section id="player-finished" class="screen">
@@ -201,8 +213,10 @@
     marked.use(markedKatex({ throwOnError: false }));
 
     const sdk = new MemizyMultiplayerSDK({ id: 'multiplayer-quiz', version: '1.0.0' });
-    const host = { init: null, ready: new Set(), started: false, timerId: null, flowToken: 0 };
+    const host = { init: null, ready: new Set(), timerIntervalId: null };
     const player = { myId: '' };
+    let syncTimeoutId = null;
+    let gameHasStarted = false;
 
     const SCREEN_IDS = [
       'host-waiting', 'host-settings', 'host-question', 'host-reveal', 'host-finished',
@@ -222,7 +236,6 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
     }
-    function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
     function shuffle(arr) {
       const out = [...arr];
       for (let i = out.length - 1; i > 0; i--) {
@@ -324,14 +337,14 @@
         const choices = getChoices(item);
         const correctIndex = reveal?.correctIndex ?? 0;
         return choices.map((choice, idx) =>
-          `<button class="answer-btn" disabled style="${idx === correctIndex ? 'outline:3px solid #fff;' : 'opacity:0.5;'}">${esc(choice)}</button>`
+          `<button class="answer-btn" disabled style="${idx === correctIndex ? 'border:4px solid #16a34a; background-color:#dcfce7; color:#166534;' : 'opacity:0.3;'}">${idx === correctIndex ? '✅ ' : ''}${esc(choice)}</button>`
         ).join('');
       }
       if (type === 'mcq-multi') {
         const choices = getChoices(item);
         const correctSet = new Set(reveal?.correctIndices ?? []);
         return choices.map((choice, idx) =>
-          `<button class="answer-btn" disabled style="${correctSet.has(idx) ? 'outline:3px solid #fff;' : 'opacity:0.5;'}">${esc(choice)}</button>`
+          `<button class="answer-btn" disabled style="${correctSet.has(idx) ? 'border:4px solid #16a34a; background-color:#dcfce7; color:#166534;' : 'opacity:0.3;'}">${correctSet.has(idx) ? '✅ ' : ''}${esc(choice)}</button>`
         ).join('');
       }
       if (type === 'short-answer') {
@@ -365,91 +378,102 @@
       await sdk.settings.setValid(true);
     }
     function stopTimer() {
-      if (host.timerId) {
-        clearInterval(host.timerId);
-        host.timerId = null;
+      if (host.timerIntervalId) {
+        clearInterval(host.timerIntervalId);
+        host.timerIntervalId = null;
       }
-      host.flowToken += 1;
     }
-
-    async function showHostQuestion(index) {
-      const state = sdk.host.getState();
-      if (!state) return;
-      await sdk.host.updateState((draft) => {
-        draft.phase = 'question';
-        draft.currentIndex = index;
-        draft.answers = {};
-        draft.reveal = null;
-        draft.timeRemaining = draft.timerSec;
-      });
-      await startTimer();
-      renderHost(sdk.host.getState());
-    }
-
     async function startTimer() {
-      stopTimer();
-      host.timerId = setInterval(async () => {
+      if (host.timerIntervalId) return;
+      host.timerIntervalId = setInterval(async () => {
         const state = sdk.host.getState();
-        if (!state || state.phase !== 'question') return;
-        const next = Math.max(0, (state.timeRemaining ?? 0) - 1);
-        await sdk.host.updateState((draft) => { draft.timeRemaining = next; });
-        if (next <= 0) await revealQuestion();
+        if (!state) return;
+
+        let stateChanged = false;
+
+        if (state.phase === 'question' && state.timeRemaining > 0) {
+          state.timeRemaining--;
+          stateChanged = true;
+          if (state.timeRemaining <= 0) {
+            stateChanged = false;
+            await revealQuestion();
+          }
+        } else if (state.phase === 'reveal' && state.revealTimeRemaining > 0) {
+          state.revealTimeRemaining--;
+          stateChanged = true;
+          if (state.revealTimeRemaining <= 0) {
+            stateChanged = false;
+            await nextQuestion();
+          }
+        }
+
+        if (stateChanged) {
+          await sdk.host.setState(state);
+          render(state);
+        }
       }, 1000);
     }
 
     async function revealQuestion() {
       const state = sdk.host.getState();
-      if (!state || state.phase !== 'question') return;
-      stopTimer();
+      if (!state || state.phase === 'reveal') return;
       const item = state.items[state.currentIndex];
-      const type = getItemType(item);
       const correctIndex = getCorrectIndex(item);
       const correctIndices = getCorrectIndices(item);
-      await sdk.host.updateState((draft) => {
-        draft.phase = 'reveal';
-        draft.reveal = { correctIndex, correctIndices, results: {} };
-        draft.lastScoreDelta = {};
-        Object.keys(draft.answers).forEach((pid) => {
-          const answer = draft.answers[pid] ?? {};
-          const correct = isCorrectAnswer(item, answer);
-          draft.reveal.results[pid] = { correct };
-          if (correct) {
-            draft.scores[pid] = (draft.scores[pid] ?? 0) + 100;
-            draft.lastScoreDelta[pid] = 100;
-          } else {
-            draft.lastScoreDelta[pid] = 0;
-          }
-        });
+      state.phase = 'reveal';
+      state.revealTimeRemaining = Math.max(2, Number(state.revealDuration ?? 5));
+      state.reveal = { correctIndex, correctIndices, results: {} };
+      state.lastScoreDelta = {};
+      Object.keys(state.answers).forEach((pid) => {
+        const answer = state.answers[pid] ?? {};
+        const correct = isCorrectAnswer(item, answer);
+        state.reveal.results[pid] = { correct };
+        if (correct) {
+          state.scores[pid] = (state.scores[pid] ?? 0) + 100;
+          state.lastScoreDelta[pid] = 100;
+        } else {
+          state.lastScoreDelta[pid] = 0;
+        }
       });
-      renderHost(sdk.host.getState());
-      const revealMs = Math.max(2, Number(state.revealDuration ?? 5)) * 1000;
-      const leaderboardMs = Math.max(0, Number(state.leaderboardDuration ?? 5)) * 1000;
-      const flowToken = host.flowToken + 1;
-      host.flowToken = flowToken;
-      await delay(revealMs);
-      if (host.flowToken !== flowToken) return;
-      if (leaderboardMs > 0) {
-        await sdk.host.updateState((draft) => { draft.phase = 'leaderboard'; });
-        renderHost(sdk.host.getState());
-        await delay(leaderboardMs);
-        if (host.flowToken !== flowToken) return;
-      }
-      await hostNext();
+
+      await sdk.host.setState(state);
+      render(state);
     }
 
-    async function hostNext() {
+    async function nextQuestion() {
       const state = sdk.host.getState();
       if (!state) return;
       const next = state.currentIndex + 1;
       if (next >= state.items.length) {
         stopTimer();
-        await sdk.host.endGame({ scores: state.scores ?? {} });
+        await sdk.host.updateState((draft) => {
+          draft.phase = 'finished';
+          draft.revealTimeRemaining = 0;
+        });
+        render(sdk.host.getState());
         return;
       }
-      await showHostQuestion(next);
+      await sdk.host.updateState((draft) => {
+        draft.phase = 'question';
+        draft.currentIndex = next;
+        draft.answers = {};
+        draft.reveal = null;
+        draft.revealTimeRemaining = 0;
+        draft.timeRemaining = draft.timerSec;
+      });
+      render(sdk.host.getState());
     }
 
     async function forceEndGame() {
+      stopTimer();
+      await sdk.host.updateState((draft) => {
+        draft.phase = 'finished';
+        draft.revealTimeRemaining = 0;
+      });
+      render(sdk.host.getState());
+    }
+
+    async function closeRoom() {
       stopTimer();
       const scores = sdk.host.getState()?.scores ?? {};
       await sdk.host.endGame({ scores });
@@ -462,48 +486,71 @@
       await sdk.player.sendAction('answer', data);
     }
 
-    function renderHost(state) {
-      if (!state) return;
-      const item = state.items[state.currentIndex];
-      el('host-answered').textContent = String(Object.keys(state.answers ?? {}).length);
-      el('host-total').textContent = String(sdk.room.getPlayers().length);
-      el('host-time').textContent = String(state.timeRemaining ?? 0);
+    async function sendAnswer(optionIndex) {
+      await submitAnswer({ optionIndex });
+    }
+    window.sendAnswer = (optionIndex) => {
+      sendAnswer(Number(optionIndex)).catch((error) => {
+        console.error('Failed to send answer', error);
+      });
+    };
 
-      if (state.phase === 'question') {
-        showScreen('host-question');
-        el('host-q-title').textContent = `Question ${state.currentIndex + 1} / ${state.items.length}`;
-        el('host-q-text').innerHTML = `<div class="prompt-html">${getPromptHtml(item)}</div>`;
-        const type = getItemType(item);
-        if (type === 'mcq-single' || type === 'true-false' || type === 'mcq-multi') {
-          el('host-q-choices').innerHTML = getChoices(item).map((choice) => `<button class="answer-btn" disabled>${esc(choice)}</button>`).join('');
-        } else if (type === 'short-answer') {
-          el('host-q-choices').innerHTML = '<div class="card"><p>Players submit a free text answer.</p></div>';
-        } else if (type === 'match-pairs') {
-          el('host-q-choices').innerHTML = '<div class="card"><p>Players submit left/right matches.</p></div>';
-        } else {
-          el('host-q-choices').innerHTML = '';
+    function render(state) {
+      if (!state) return;
+      const role = sdk.room.role;
+
+      if (state.phase === 'finished') {
+        if (role === 'host') {
+          showScreen('host-finished');
+          renderBoard('host-final-board', buildRows(state.scores ?? {}));
+        } else if (role === 'player') {
+          showScreen('player-finished');
+          renderBoard('player-final-board', buildRows(state.scores ?? {}));
         }
+        return;
       }
 
-      if (state.phase === 'reveal' || state.phase === 'leaderboard') {
-        showScreen('host-reveal');
-        if (state.phase === 'leaderboard') {
-          el('host-reveal-title').textContent = 'Leaderboard';
-          el('host-reveal-text').innerHTML = '<div class="prompt-html">Round standings</div>';
-          el('host-reveal-choices').innerHTML = `<div class="leaderboard">${buildRows(state.scores ?? {}).map((row, idx) =>
-            `<div class="lb-row"><span>${idx + 1}. ${esc(row.name)}</span><strong>${row.score}</strong></div>`
-          ).join('')}</div>`;
+      const item = state.items?.[state.currentIndex];
+      if (!item) return;
+
+      if (role === 'host') {
+        el('host-answered').textContent = String(Object.keys(state.answers ?? {}).length);
+        el('host-total').textContent = String(sdk.room.getPlayers().length);
+        el('host-time').textContent = String(state.timeRemaining ?? 0);
+        if (state.phase === 'question') {
+          showScreen('host-question');
+          el('host-q-title').textContent = `Question ${state.currentIndex + 1} / ${state.items.length}`;
+          el('host-q-text').innerHTML = `<div class="prompt-html">${getPromptHtml(item)}</div>`;
+          const type = getItemType(item);
+          if (type === 'mcq-single' || type === 'true-false' || type === 'mcq-multi') {
+            el('host-q-choices').innerHTML = getChoices(item).map((choice) => `<button class="answer-btn" disabled>${esc(choice)}</button>`).join('');
+          } else if (type === 'short-answer') {
+            el('host-q-choices').innerHTML = '<div class="card"><p>Players submit a free text answer.</p></div>';
+          } else if (type === 'match-pairs') {
+            el('host-q-choices').innerHTML = '<div class="card"><p>Players submit left/right matches.</p></div>';
+          } else {
+            el('host-q-choices').innerHTML = '';
+          }
           return;
         }
-        el('host-reveal-title').textContent = `Reveal ${state.currentIndex + 1} / ${state.items.length}`;
-        el('host-reveal-text').innerHTML = `<div class="prompt-html">${getPromptHtml(item)}</div>`;
-        el('host-reveal-choices').innerHTML = getRevealMarkup(item, state.reveal);
+        if (state.phase === 'reveal' || state.phase === 'leaderboard') {
+          showScreen('host-reveal');
+          el('host-reveal-time').textContent = String(state.revealTimeRemaining ?? 0);
+          if (state.phase === 'leaderboard') {
+            el('host-reveal-title').textContent = 'Leaderboard';
+            el('host-reveal-text').innerHTML = '<div class="prompt-html">Round standings</div>';
+            el('host-reveal-choices').innerHTML = `<div class="leaderboard">${buildRows(state.scores ?? {}).map((row, idx) =>
+              `<div class="lb-row"><span>${idx + 1}. ${esc(row.name)}</span><strong>${row.score}</strong></div>`
+            ).join('')}</div>`;
+            return;
+          }
+          el('host-reveal-title').textContent = `Reveal ${state.currentIndex + 1} / ${state.items.length}`;
+          el('host-reveal-text').innerHTML = `<div class="prompt-html">${getPromptHtml(item)}</div>`;
+          el('host-reveal-choices').innerHTML = getRevealMarkup(item, state.reveal);
+        }
+        return;
       }
-    }
 
-    function renderPlayer(state) {
-      if (!state) return;
-      const item = state.items[state.currentIndex];
       if (state.phase === 'question') {
         if (state.answers?.[player.myId]) {
           showScreen('player-answered');
@@ -516,13 +563,8 @@
         const type = getItemType(item);
         if (type === 'mcq-single' || type === 'true-false') {
           el('player-q-choices').innerHTML = getChoices(item).map((choice, idx) =>
-            `<button class="answer-btn" data-idx="${idx}">${esc(choice)}</button>`
+            `<button class="answer-btn" onclick="window.sendAnswer(${idx})">${esc(choice)}</button>`
           ).join('');
-          el('player-q-choices').querySelectorAll('button').forEach((btn) => {
-            btn.addEventListener('click', async () => {
-              await submitAnswer({ optionIndex: Number(btn.getAttribute('data-idx')) });
-            });
-          });
         } else if (type === 'mcq-multi') {
           const choices = getChoices(item);
           el('player-q-choices').innerHTML = `
@@ -575,22 +617,25 @@
         } else {
           el('player-q-choices').innerHTML = '';
         }
+        return;
       }
-      if (state.phase === 'reveal') {
+
+      if (state.phase === 'reveal' || state.phase === 'leaderboard') {
         showScreen('player-reveal');
+        el('player-reveal-time').textContent = String(state.revealTimeRemaining ?? 0);
+        if (state.phase === 'leaderboard') {
+          el('player-result').textContent = 'Leaderboard';
+          const rows = buildRows(state.scores ?? {});
+          const myRow = rows.find((row) => row.id === player.myId);
+          el('player-score-msg').textContent = myRow
+            ? `Your score: ${myRow.score}`
+            : 'Round standings are updating...';
+          return;
+        }
         const correct = state.reveal?.results?.[player.myId]?.correct === true;
         const delta = state.lastScoreDelta?.[player.myId] ?? 0;
         el('player-result').textContent = correct ? 'Correct!' : 'Incorrect';
         el('player-score-msg').textContent = correct ? `+${delta} points` : 'No points this round';
-      }
-      if (state.phase === 'leaderboard') {
-        showScreen('player-reveal');
-        el('player-result').textContent = 'Leaderboard';
-        const rows = buildRows(state.scores ?? {});
-        const myRow = rows.find((row) => row.id === player.myId);
-        el('player-score-msg').textContent = myRow
-          ? `Your score: ${myRow.score}`
-          : 'Round standings are updating...';
       }
     }
 
@@ -599,7 +644,9 @@
     el('setting-leaderboard-duration').addEventListener('change', async () => { await pushSettings(); });
     el('setting-shuffle').addEventListener('change', async () => { await pushSettings(); });
     el('host-reveal-btn').addEventListener('click', async () => { await revealQuestion(); });
-    el('host-end-btn').addEventListener('click', async () => { await forceEndGame(); });
+    el('host-end-btn-question').addEventListener('click', async () => { await forceEndGame(); });
+    el('host-end-btn-reveal').addEventListener('click', async () => { await forceEndGame(); });
+    el('host-close-room-btn').addEventListener('click', async () => { await closeRoom(); });
 
     sdk.onInit(async (init) => {
       if (init.role === 'host') {
@@ -615,6 +662,26 @@
       await sdk.room.clientReady();
     });
 
+    async function beginPlaying() {
+      if (gameHasStarted) return;
+      gameHasStarted = true;
+
+      if (syncTimeoutId) {
+        clearTimeout(syncTimeoutId);
+        syncTimeoutId = null;
+      }
+
+      const currentState = sdk.host.getState();
+      if (currentState) {
+        await sdk.host.setState(currentState);
+        render(sdk.host.getState());
+      }
+
+      await sdk.room.startGame();
+
+      await startTimer();
+    }
+
     sdk.onStartGameRequested(async () => {
       if (sdk.room.role !== 'host') return;
       await pushSettings();
@@ -624,14 +691,9 @@
       const leaderboardDuration = Math.max(0, Number(settings.leaderboardDuration ?? 5));
       const shuffleQuestions = Boolean(settings.shuffleQuestions);
       const sourceItems = host.init?.items ?? [];
-      const supportedTypes = new Set(['mcq-single', 'true-false', 'mcq-multi', 'short-answer', 'match-pairs']);
-      const items = sourceItems.filter((item) => supportedTypes.has(getItemType(item)));
-      const activeItems = shuffleQuestions ? shuffle(items) : items.slice();
+      const activeItems = shuffleQuestions ? shuffle(sourceItems) : sourceItems.slice();
       const scores = {};
       sdk.room.getPlayers().forEach((p) => { scores[p.id] = 0; });
-
-      host.ready = new Set();
-      host.started = false;
 
       await sdk.host.setState({
         phase: 'question',
@@ -644,21 +706,42 @@
         answers: {},
         scores,
         reveal: null,
+        revealTimeRemaining: 0,
         lastScoreDelta: {},
       });
+      render(sdk.host.getState());
+
+      host.ready = new Set();
+      gameHasStarted = false;
+      if (syncTimeoutId) {
+        clearTimeout(syncTimeoutId);
+        syncTimeoutId = null;
+      }
 
       await sdk.room.startGame();
-      renderHost(sdk.host.getState());
+
+      syncTimeoutId = setTimeout(async () => {
+        await beginPlaying();
+      }, 10000);
     });
 
     sdk.onPlayerReady(async (playerId) => {
       if (sdk.room.role !== 'host') return;
       host.ready.add(playerId);
-      const total = sdk.room.getPlayers().length;
-      if (!host.started && total > 0 && host.ready.size >= total) {
-        host.started = true;
-        await sdk.room.startGame();
-        await showHostQuestion(0);
+
+      const totalPlayers = sdk.room.getPlayers().length;
+      if (host.ready.size >= totalPlayers) {
+        await beginPlaying();
+      }
+    });
+
+    sdk.onPlayerJoin(async (playerInfo, meta) => {
+      if (sdk.room.role !== 'host') return;
+      if (meta.isLateJoin || meta.isReconnect) {
+        const state = sdk.host.getState();
+        if (state) {
+          await sdk.host.sendStateTo(playerInfo.id, state);
+        }
       }
     });
 
@@ -679,26 +762,28 @@
                 : false;
       if (!isValidPayload) return;
       await sdk.host.updateState((draft) => { draft.answers[playerId] = data; });
-      renderHost(sdk.host.getState());
+      render(sdk.host.getState());
       const answered = Object.keys(sdk.host.getState()?.answers ?? {}).length;
       const total = sdk.room.getPlayers().length;
-      if (total > 0 && answered >= total) await revealQuestion();
+      if (total > 0 && answered >= total) {
+        await revealQuestion();
+        render(sdk.host.getState());
+      }
     });
 
     sdk.onState((state) => {
-      if (sdk.room.role === 'player') renderPlayer(state);
+      if (sdk.room.role === 'player') render(state);
     });
 
     sdk.onGameEnd((result) => {
-      stopTimer();
-      const rows = buildRows(result?.scores ?? {});
-      if (sdk.room.role === 'host') {
-        renderBoard('host-final-board', rows);
-        showScreen('host-finished');
-      } else {
-        renderBoard('player-final-board', rows);
-        showScreen('player-finished');
+      if (syncTimeoutId) {
+        clearTimeout(syncTimeoutId);
+        syncTimeoutId = null;
       }
+      stopTimer();
+      const scores = result?.scores ?? {};
+      const baseState = sdk.room.role === 'host' ? (sdk.host.getState() ?? {}) : (sdk.player.state ?? {});
+      render({ ...baseState, phase: 'finished', scores });
     });
 
     try {
