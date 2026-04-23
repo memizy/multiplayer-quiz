@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Multiplayer Quiz – Memizy Plugin</title>
+  <title>Multiplayer Quiz</title>
 
-  <!-- OQSE Application Manifest (HTML Data Island) -->
   <script type="application/oqse-manifest+json">
   {
     "$schema": "https://memizy.com/schemas/oqse-manifest/v1.0.json",
@@ -15,34 +14,25 @@
     "maxOqseVersion": "1.99",
     "id": "https://memizy.github.io/multiplayer-quiz/",
     "appName": "Multiplayer Quiz",
-    "description": "Real-time multiplayer quiz game with live leaderboard, configurable time limits, and competitive gameplay for classrooms and study groups.",
+    "description": "Simple multiplayer quiz with mcq-single support.",
     "author": "Memizy Team",
     "authorUrl": "https://memizy.com",
-    "locales": ["en", "cs"],
-    "tags": ["quiz", "multiplayer", "game", "real-time", "leaderboard"],
+    "locales": ["en"],
+    "tags": ["quiz", "multiplayer", "game"],
     "emoji": "🎮",
     "studyMode": "game",
-    "questionDensity": "high",
+    "questionDensity": "medium",
     "capabilities": {
       "actions": ["render"],
-      "types": ["mcq-single", "mcq-multi", "true-false", "short-answer", "match-pairs"],
-      "assets": {
-        "image": ["image/jpeg", "image/png", "image/svg+xml", "image/webp"],
-        "audio": null,
-        "video": null,
-        "model": null
-      },
-      "features": ["markdown"]
+      "types": ["mcq-single", "true-false"],
+      "assets": { "image": null, "audio": null, "video": null, "model": null },
+      "features": []
     },
     "appSpecific": {
       "memizy": {
         "multiplayer": {
-          "apiVersion": "0.3",
-          "players": {
-            "min": 2,
-            "max": 60,
-            "recommended": 30
-          },
+          "apiVersion": "0.4",
+          "players": { "min": 2, "max": 60, "recommended": 20 },
           "supportsLateJoin": true,
           "supportsReconnect": true,
           "supportsTeams": false,
@@ -55,1397 +45,412 @@
   </script>
 
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --blue: #2563eb;
-      --orange: #f97316;
-      --green: #16a34a;
-      --red: #dc2626;
-      --purple: #7c3aed;
-      --teal: #0891b2;
-      --gray-50: #f9fafb;
-      --gray-100: #f3f4f6;
-      --gray-200: #e5e7eb;
-      --gray-400: #9ca3af;
-      --gray-600: #4b5563;
-      --gray-900: #111827;
-    }
-
-    html, body { height: 100%; font-family: system-ui, -apple-system, sans-serif; background: var(--gray-50); color: var(--gray-900); }
-
-    /* ─── Layout ─── */
-    #app { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-    .screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; gap: 1.5rem; overflow-y: auto; }
-    .screen.hidden { display: none !important; }
-
-    /* ─── Typography ─── */
-    h1 { font-size: 1.75rem; font-weight: 800; text-align: center; }
-    h2 { font-size: 1.35rem; font-weight: 700; text-align: center; }
-    p  { color: var(--gray-600); text-align: center; font-size: 0.95rem; }
-
-    /* ─── Cards ─── */
-    .card { background: #fff; border-radius: 1rem; box-shadow: 0 4px 16px rgba(0,0,0,.08); padding: 1.5rem; width: 100%; max-width: 600px; }
-
-    /* ─── Buttons ─── */
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.65rem 1.4rem; border-radius: 0.6rem; font-weight: 600; font-size: 0.95rem; cursor: pointer; border: none; transition: opacity .15s, transform .1s; }
-    .btn:hover { opacity: 0.88; }
-    .btn:active { transform: scale(0.97); }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-primary   { background: var(--blue);   color: #fff; }
-    .btn-orange    { background: var(--orange);  color: #fff; }
-    .btn-green     { background: var(--green);   color: #fff; }
-    .btn-red       { background: var(--red);     color: #fff; font-size: 0.85rem; }
-    .btn-ghost     { background: var(--gray-100); color: var(--gray-600); }
-    .btn-full      { width: 100%; }
-
-    /* ─── Answer grid ─── */
-    .answer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; width: 100%; max-width: 600px; }
-    .answer-btn  { padding: 1.1rem 1rem; border: none; border-radius: 0.75rem; font-size: 1rem; font-weight: 700; color: #fff; cursor: pointer; transition: opacity .15s, transform .1s; text-align: left; }
-    .answer-btn:hover:not(:disabled) { opacity: 0.88; }
-    .answer-btn:active:not(:disabled)  { transform: scale(0.97); }
-    .answer-btn:disabled { cursor: not-allowed; }
-    .answer-btn.selected { outline: 4px solid #fff; }
-    .answer-btn.correct  { filter: brightness(1.1); }
-    .answer-btn.incorrect { filter: brightness(0.6); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; }
+    #app { min-height: 100vh; display: flex; flex-direction: column; }
+    .screen { display: none; flex: 1; max-width: 760px; width: 100%; margin: 0 auto; padding: 20px; }
+    .screen.active { display: flex; flex-direction: column; gap: 14px; justify-content: center; }
+    .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 3px 12px rgba(0,0,0,0.08); }
+    .row { display: flex; align-items: center; gap: 10px; }
+    .row.center { justify-content: center; }
+    .col { display: flex; flex-direction: column; gap: 10px; }
+    h1, h2, p { text-align: center; }
+    p { color: #475569; }
+    .muted { font-size: 14px; color: #64748b; }
+    .btn { border: 0; padding: 10px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; background: #2563eb; color: #fff; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary { background: #475569; }
+    .answer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .answer-btn { border: 0; color: #fff; border-radius: 10px; padding: 14px; font-size: 16px; font-weight: 700; text-align: left; cursor: pointer; }
     .answer-btn:nth-child(1) { background: #ef4444; }
     .answer-btn:nth-child(2) { background: #3b82f6; }
     .answer-btn:nth-child(3) { background: #22c55e; }
     .answer-btn:nth-child(4) { background: #f59e0b; }
-
-    /* ─── HUD bar ─── */
-    .hud { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 1rem; background: #1e293b; color: #fff; font-size: 0.85rem; font-weight: 600; gap: 1rem; flex-shrink: 0; }
-    .hud .badge { background: rgba(255,255,255,.15); border-radius: 0.4rem; padding: 0.25rem 0.6rem; }
-
-    /* ─── Progress bar ─── */
-    .progress-wrap { width: 100%; max-width: 600px; height: 6px; background: var(--gray-200); border-radius: 99px; overflow: hidden; }
-    .progress-bar  { height: 100%; background: var(--orange); transition: width 1s linear; }
-
-    /* ─── Player list ─── */
-    .player-list { list-style: none; width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 0.5rem; max-height: 260px; overflow-y: auto; }
-    .player-item { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: var(--gray-100); border-radius: 0.5rem; font-size: 0.9rem; }
-    .player-item .score { font-weight: 700; color: var(--blue); }
-
-    /* ─── Leaderboard ─── */
-    .leaderboard { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 0.5rem; }
-    .lb-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 1rem; background: #fff; border-radius: 0.6rem; box-shadow: 0 2px 6px rgba(0,0,0,.06); }
-    .lb-rank { font-size: 1.3rem; width: 2rem; text-align: center; }
-    .lb-name { flex: 1; font-weight: 600; }
-    .lb-score { font-weight: 800; color: var(--orange); font-size: 1.1rem; }
-
-    /* ─── Waiting pulse ─── */
-    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
-    .pulse { animation: pulse 2s infinite; }
-
-    /* ─── Answer counter bar ─── */
-    .answer-counter { width: 100%; max-width: 600px; display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: var(--gray-600); }
-    .answer-counter strong { color: var(--gray-900); font-size: 1.1rem; }
-
-    /* ─── Timer ring ─── */
-    .timer-ring { font-size: 2rem; font-weight: 900; color: var(--orange); min-width: 3rem; text-align: center; }
-
-    /* ─── Misc ─── */
-    .gap-sm { gap: 0.5rem; }
-    .mt-sm { margin-top: 0.5rem; }
-    .subtitle { font-size: 0.8rem; color: var(--gray-400); margin-top: 0.25rem; }
-    .question-num { font-size: 0.85rem; font-weight: 600; color: var(--gray-400); letter-spacing: 0.05em; text-transform: uppercase; }
-
-    /* ─── Result badge ─── */
-    .result-badge { font-size: 3rem; }
-    .result-text  { font-size: 1.4rem; font-weight: 800; }
-    .result-pts   { font-size: 1rem; color: var(--gray-600); margin-top: 0.25rem; }
-
-    /* ─── Responsive ─── */
-    @media (max-width: 480px) {
-      .screen { padding: 0.75rem; gap: 0.75rem; }
-      .card { padding: 0.9rem; border-radius: 0.75rem; }
-      h1 { font-size: 1.3rem; }
-      h2 { font-size: 1.05rem; }
-      p  { font-size: 0.85rem; }
-      .answer-btn { padding: 0.75rem 0.6rem; font-size: 0.85rem; border-radius: 0.5rem; }
-      .answer-grid { gap: 0.4rem; }
-      .btn { padding: 0.55rem 1rem; font-size: 0.85rem; }
-      .timer-ring { font-size: 1.5rem; min-width: 2.2rem; }
-      .leaderboard { gap: 0.35rem; }
-      .lb-row { padding: 0.45rem 0.75rem; gap: 0.5rem; }
-      .lb-rank { font-size: 1rem; width: 1.5rem; }
-      .lb-score { font-size: 0.95rem; }
-      .hud { font-size: 0.75rem; padding: 0.45rem 0.75rem; }
-    }
-    @media (max-width: 400px) {
-      .answer-grid { grid-template-columns: 1fr; }
-      h1 { font-size: 1.2rem; }
-      h2 { font-size: 1rem; }
-      .screen { padding: 0.6rem; gap: 0.6rem; }
-    }
+    .answer-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .leaderboard { display: flex; flex-direction: column; gap: 8px; }
+    .lb-row { background: #fff; border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    label { font-size: 14px; color: #475569; }
+    input[type="number"] { width: 110px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; }
   </style>
 </head>
 <body>
-<div id="app">
+  <div id="app">
+    <section id="host-waiting" class="screen active">
+      <h1>Multiplayer Quiz</h1>
+      <p>Connecting to session...</p>
+    </section>
 
-  <!-- HOST HUD (shown during playing/reveal/leaderboard for host) -->
-  <div id="host-hud" class="hud hidden">
-    <span>🚀 Multiplayer Quiz</span>
-    <span id="hud-q-counter" class="badge">Q — / —</span>
-    <span id="hud-player-count" class="badge">0 players</span>
-    <button onclick="Plugin.forceEndGame()" class="btn btn-red" style="padding:0.3rem 0.7rem; font-size:0.75rem">End</button>
-  </div>
-
-  <!-- ═══════════════════════
-       HOST VIEWS
-  ═══════════════════════ -->
-
-  <!-- Host: Waiting for init -->
-  <div id="host-waiting" class="screen">
-    <div style="font-size:3rem">🚀</div>
-    <h1>Multiplayer Quiz</h1>
-    <p class="pulse">Connecting to session…</p>
-  </div>
-
-  <!-- Host: Settings (runMode=host-settings) -->
-  <div id="host-settings" class="screen hidden">
-    <div style="font-size:3rem">⚙️</div>
-    <h1>Quiz Settings</h1>
-    <div class="card" style="text-align:center">
-      <p style="font-size:0.8rem; color:var(--gray-400); margin-bottom:0.25rem">Session PIN</p>
-      <div id="lobby-pin" style="font-size:3rem; font-weight:900; letter-spacing:0.15em; color:var(--blue)">——</div>
-    </div>
-    <div class="card" style="max-width:600px">
-      <h2 style="text-align:left; margin-bottom:0.85rem">Gameplay</h2>
-      <div style="display:grid;grid-template-columns:1fr auto;gap:0.75rem;align-items:center">
-        <label for="setting-time-per-question" style="text-align:left">Time per question (seconds)</label>
-        <input id="setting-time-per-question" type="number" min="5" max="180" step="1" value="20" style="width:6rem;padding:0.5rem;border:2px solid var(--gray-200);border-radius:0.5rem" />
-
-        <label for="setting-leaderboard-every" style="text-align:left">Show leaderboard every N questions (0 = off)</label>
-        <input id="setting-leaderboard-every" type="number" min="0" max="20" step="1" value="0" style="width:6rem;padding:0.5rem;border:2px solid var(--gray-200);border-radius:0.5rem" />
-
-        <label for="setting-auto-advance" style="text-align:left">Auto-advance reveal/leaderboard (seconds, 0 = off)</label>
-        <input id="setting-auto-advance" type="number" min="0" max="30" step="1" value="0" style="width:6rem;padding:0.5rem;border:2px solid var(--gray-200);border-radius:0.5rem" />
-
-        <label for="setting-shuffle-questions" style="text-align:left">Shuffle questions</label>
-        <input id="setting-shuffle-questions" type="checkbox" style="width:1.1rem;height:1.1rem;justify-self:start" />
+    <section id="host-settings" class="screen">
+      <h1>Host Settings</h1>
+      <div class="card col">
+        <h2 id="host-pin">----</h2>
+        <div class="row">
+          <label for="setting-timer">Seconds/question</label>
+          <input id="setting-timer" type="number" min="5" max="120" value="20" />
+        </div>
+        <div class="row">
+          <label for="setting-shuffle">Shuffle questions</label>
+          <input id="setting-shuffle" type="checkbox" />
+        </div>
+        <p class="muted">Use the host controls in Memizy to start.</p>
       </div>
-    </div>
-    <div style="width:100%; max-width:600px">
-      <p style="font-size:0.85rem; color:var(--gray-400); margin-bottom:0.5rem"><strong id="lobby-player-count">0</strong> players joined</p>
-      <ul id="lobby-player-list" class="player-list"></ul>
-    </div>
-    <p class="subtitle">Use the Memizy host controls to continue through Prepare and Start.</p>
+    </section>
+
+    <section id="host-question" class="screen">
+      <h2 id="host-q-title">Question</h2>
+      <div class="card"><h2 id="host-q-text">Question text</h2></div>
+      <div id="host-q-choices" class="answer-grid"></div>
+      <div class="row center">
+        <div><strong id="host-answered">0</strong> / <strong id="host-total">0</strong> answered</div>
+        <div>Time: <strong id="host-time">0</strong>s</div>
+      </div>
+      <div class="row center"><button id="host-reveal-btn" class="btn btn-secondary">Reveal</button></div>
+    </section>
+
+    <section id="host-reveal" class="screen">
+      <h2 id="host-reveal-title">Reveal</h2>
+      <div class="card"><h2 id="host-reveal-text">Question text</h2></div>
+      <div id="host-reveal-choices" class="answer-grid"></div>
+      <div class="row center">
+        <button id="host-next-btn" class="btn">Next</button>
+        <button id="host-end-btn" class="btn btn-secondary">End Game</button>
+      </div>
+    </section>
+
+    <section id="host-finished" class="screen">
+      <h1>Game Finished</h1>
+      <div id="host-final-board" class="leaderboard"></div>
+    </section>
+
+    <section id="player-waiting" class="screen">
+      <h1 id="player-name">Ready</h1>
+      <p>Waiting for host...</p>
+    </section>
+
+    <section id="player-question" class="screen">
+      <h2 id="player-q-title">Question</h2>
+      <div class="card"><h2 id="player-q-text">Question text</h2></div>
+      <div id="player-q-choices" class="answer-grid"></div>
+      <p>Time left: <strong id="player-time">0</strong>s</p>
+    </section>
+
+    <section id="player-answered" class="screen">
+      <h1>Answer sent</h1>
+      <p>Waiting for others...</p>
+    </section>
+
+    <section id="player-reveal" class="screen">
+      <h1 id="player-result">Result</h1>
+      <p id="player-score-msg"></p>
+    </section>
+
+    <section id="player-finished" class="screen">
+      <h1>Game Finished</h1>
+      <div id="player-final-board" class="leaderboard"></div>
+    </section>
+
+    <section id="error-screen" class="screen">
+      <h1>Error</h1>
+      <p id="error-text">Unexpected error.</p>
+    </section>
   </div>
 
-  <!-- Host: Question view -->
-  <div id="host-question" class="screen hidden">
-    <span id="host-q-num" class="question-num">Question 1 of 5</span>
-    <div class="progress-wrap">
-      <div id="host-progress" class="progress-bar" style="width:0%"></div>
-    </div>
-    <div class="card">
-      <h2 id="host-q-text">Question text</h2>
-    </div>
-    <div id="host-answers" class="answer-grid"></div>
-    <div class="answer-counter">
-      <div>Answered: <strong id="host-answered-count">0</strong> / <strong id="host-total-count">0</strong></div>
-      <div class="timer-ring" id="host-timer">20</div>
-      <button class="btn btn-ghost" onclick="Plugin.hostReveal()">Reveal →</button>
-    </div>
-  </div>
+  <script type="module">
+    import { MemizyMultiplayerSDK } from 'https://esm.sh/@memizy/multiplayer-sdk@0.4.0';
 
-  <!-- Host: Reveal view -->
-  <div id="host-reveal" class="screen hidden">
-    <span id="host-rev-num" class="question-num">Question 1 of 5</span>
-    <div class="card">
-      <h2 id="host-rev-text">Question text</h2>
-    </div>
-    <div id="host-rev-answers" class="answer-grid"></div>
-    <div style="display:flex;gap:0.75rem;width:100%;max-width:600px;align-items:center">
-      <button id="btn-next" class="btn btn-primary btn-full" onclick="Plugin.hostNext()">Next →</button>
-      <span id="auto-advance-countdown" style="display:none;font-size:1.3rem;font-weight:900;color:var(--orange);min-width:2rem;text-align:center"></span>
-    </div>
-  </div>
+    const sdk = new MemizyMultiplayerSDK({ id: 'multiplayer-quiz', version: '1.0.0' });
+    const host = { init: null, ready: new Set(), started: false, timerId: null };
+    const player = { myId: '' };
 
-  <!-- Host: Leaderboard -->
-  <div id="host-leaderboard" class="screen hidden">
-    <div style="font-size:3rem">🏆</div>
-    <h1>Leaderboard</h1>
-    <div id="host-lb" class="leaderboard"></div>
-    <div style="display:flex;gap:0.75rem;width:100%;max-width:500px;align-items:center">
-      <button class="btn btn-orange btn-full" onclick="Plugin.hostNextAfterLb()">Continue →</button>
-      <span id="auto-advance-lb-countdown" style="display:none;font-size:1.3rem;font-weight:900;color:var(--orange);min-width:2rem;text-align:center"></span>
-    </div>
-  </div>
+    const SCREEN_IDS = [
+      'host-waiting', 'host-settings', 'host-question', 'host-reveal', 'host-finished',
+      'player-waiting', 'player-question', 'player-answered', 'player-reveal', 'player-finished', 'error-screen',
+    ];
 
-  <!-- Host: Finished -->
-  <div id="host-finished" class="screen hidden">
-    <div style="font-size:4rem">🎉</div>
-    <h1>Mission Complete!</h1>
-    <div id="host-final-lb" class="leaderboard"></div>
-    <p class="pulse mt-sm">Returning to mission control…</p>
-  </div>
-
-  <!-- ═══════════════════════
-       PLAYER VIEWS
-  ═══════════════════════ -->
-
-  <!-- Player: Waiting for game to start -->
-  <div id="player-waiting" class="screen hidden">
-    <div style="font-size:3rem">🛰️</div>
-    <h1 id="player-name-display">Ready!</h1>
-    <p class="pulse">Waiting for host to launch…</p>
-    <div class="card" style="text-align:center; max-width:280px">
-      <p style="font-size:0.8rem; color:var(--gray-400)">Room PIN</p>
-      <div id="player-pin-display" style="font-size:2rem; font-weight:900; letter-spacing:0.12em; color:var(--blue)">——</div>
-    </div>
-    <span id="player-count-display" style="font-size:0.85rem; color:var(--gray-400)">0 players in lobby</span>
-  </div>
-
-  <!-- Player: Question (shared container, rendered per type) -->
-  <div id="player-question" class="screen hidden">
-    <span id="player-q-num" class="question-num">Question 1 of 5</span>
-    <div class="progress-wrap">
-      <div id="player-progress" class="progress-bar" style="width:0%"></div>
-    </div>
-    <div class="card">
-      <h2 id="player-q-text">Question text</h2>
-    </div>
-    <!-- mcq-single / true-false / mcq-multi answer grid -->
-    <div id="player-answers" class="answer-grid"></div>
-    <!-- short-answer input -->
-    <div id="player-short-answer" class="hidden" style="width:100%;max-width:600px;display:flex;gap:0.75rem">
-      <input id="player-sa-input" type="text" placeholder="Type your answer…"
-        style="flex:1;padding:0.8rem 1rem;border:2px solid var(--gray-200);border-radius:0.75rem;font-size:1rem;outline:none"
-        onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--gray-200)'"
-        onkeydown="if(event.key==='Enter')Plugin.playerSubmitShortAnswer()" />
-      <button class="btn btn-primary" onclick="Plugin.playerSubmitShortAnswer()">Submit</button>
-    </div>
-    <!-- match-pairs UI -->
-    <div id="player-match-pairs" class="hidden" style="width:100%;max-width:600px"></div>
-    <div class="timer-ring" id="player-timer">20</div>
-  </div>
-
-  <!-- Player: Waiting for reveal -->
-  <div id="player-answered" class="screen hidden">
-    <div style="font-size:3rem" id="player-ans-icon">⏳</div>
-    <h2 id="player-ans-msg">Answer submitted!</h2>
-    <p class="pulse">Waiting for host to reveal…</p>
-  </div>
-
-  <!-- Player: Reveal result -->
-  <div id="player-result" class="screen hidden">
-    <div class="result-badge" id="player-result-badge">✅</div>
-    <div class="result-text" id="player-result-text">Correct!</div>
-    <div class="result-pts" id="player-result-pts">+200 fuel</div>
-  </div>
-
-  <!-- Player: Leaderboard (interim) -->
-  <div id="player-leaderboard" class="screen hidden">
-    <div style="font-size:2.5rem">📊</div>
-    <h1>Leaderboard</h1>
-    <div id="player-lb" class="leaderboard"></div>
-    <p class="pulse mt-sm">Next question coming…</p>
-  </div>
-
-  <!-- Player: Finished -->
-  <div id="player-finished" class="screen hidden">
-    <div style="font-size:4rem">🎉</div>
-    <h1>Mission Complete!</h1>
-    <div id="player-final-lb" class="leaderboard"></div>
-  </div>
-
-  <!-- Error / generic waiting fallback -->
-  <div id="screen-error" class="screen hidden">
-    <div style="font-size:3rem">⚠️</div>
-    <h1>Oops</h1>
-    <p id="error-msg">Something went wrong.</p>
-  </div>
-
-</div>
-
-<script>
-let sdk = null;
-
-function sdkSendAction(type, data) {
-  if (!sdk) {
-    console.warn('[multiplayer-quiz] sdk not ready for sendAction', type);
-    return;
-  }
-  if (sdk.player && typeof sdk.player.sendAction === 'function') {
-    sdk.player.sendAction(type, data);
-    return;
-  }
-  console.error('[multiplayer-quiz] no player.sendAction API found on SDK');
-}
-
-function sdkBroadcastState(state) {
-  if (!sdk) {
-    console.warn('[multiplayer-quiz] sdk not ready for broadcast');
-    return;
-  }
-  if (sdk.host && typeof sdk.host.broadcastState === 'function') {
-    sdk.host.broadcastState(state);
-    return;
-  }
-  console.error('[multiplayer-quiz] no host.broadcastState API found on SDK');
-}
-
-async function bootstrapSdkRuntime() {
-  try {
-    const {
-      createMultiplayerPlugin,
-      loadManifestFromDataIsland,
-      renderLandingPageIfNeeded,
-    } = await import('https://cdn.jsdelivr.net/npm/@memizy/multiplayer-sdk@0.3.1/+esm');
-
-    const manifest = typeof loadManifestFromDataIsland === 'function'
-      ? loadManifestFromDataIsland()
-      : null;
-
-    const renderedStandalone = typeof renderLandingPageIfNeeded === 'function'
-      ? renderLandingPageIfNeeded(manifest, {
-          docsUrl: 'https://learn.memizy.com/multiplayer',
-          sandboxUrl: 'https://memizy.github.io/multiplayer-sdk/examples/sandbox/',
-        })
-      : false;
-
-    if (renderedStandalone) {
-      return;
+    function el(id) { return document.getElementById(id); }
+    function showScreen(id) {
+      SCREEN_IDS.forEach((sid) => el(sid)?.classList.remove('active'));
+      el(id)?.classList.add('active');
     }
-
-    sdk = createMultiplayerPlugin();
-
-    sdk.defineHost({
-      onInit(context) {
-        Plugin.initHost(context);
-      },
-      onPrepareGame(players) {
-        Plugin.onHostPrepareGame(players);
-      },
-      onStartGame() {
-        Plugin.onHostStartGame();
-      },
-      onPlayerJoined(player) {
-        Plugin.onPlayerJoined(player);
-      },
-      onPlayerLeft(playerId) {
-        Plugin.onPlayerLeft(playerId);
-      },
-      onPlayerAction(action, playerId) {
-        Plugin.onPlayerAction({
-          type: action?.type,
-          data: {
-            ...(action?.data ?? {}),
-            playerId: action?.data?.playerId ?? playerId,
-          },
-        });
-      },
-    });
-
-    sdk.definePlayer({
-      onInit(context) {
-        Plugin.initPlayer({
-          ...context,
-          playerId: context?.myPlayerId ?? context?.playerId,
-          playerName: context?.myPlayerName ?? context?.playerName,
-        });
-      },
-      onPrepareGame(players) {
-        Plugin.onPlayerPrepareGame(players);
-      },
-      onStartGame() {
-        Plugin.onPlayerStartGame();
-      },
-      onStateUpdate(state) {
-        Plugin.onStateUpdate(state);
-      },
-    });
-
-    sdk.start();
-  } catch (error) {
-    console.error('Failed to bootstrap @memizy/multiplayer-sdk', error);
-    showOnly('screen-error');
-    const screen = el('screen-error');
-    if (screen) {
-      screen.innerHTML = '<h2>Failed to load multiplayer SDK</h2><p>Please try again later.</p>';
-    }
-  }
-}
-
-// ══════════════════════════════════════════════════════════
-// Game Plugin — global state & UI logic
-// ══════════════════════════════════════════════════════════
-
-let pin = '';
-let playerName = '';
-let myPlayerId = '';
-let hostRunMode = 'host-game';
-let playerRunMode = 'client-game';
-
-// HOST state
-let hostBaseItems = [];    // Unmodified filtered item set
-let hostItems = [];        // OQSE items (questions)
-let hostPlayers = {};      // { [playerId]: { id, name, score, answeredThisRound } }
-let hostAnswers = {};      // { [playerId]: { data, timeTakenMs } } for current question
-let hostQIndex = 0;
-let hostTimerInterval = null;
-let hostTimerValue = 20;
-let hostSettings = { timePerQuestion: 20, showLeaderboardAfterEvery: 0, shuffleQuestions: false, autoAdvanceReveal: 0 };
-let hostAutoAdvanceInterval = null;
-
-// PLAYER state
-let playerLastAnswer = null;  // stored answer payload for reveal display
-let playerScore = 0;
-let playerMpSelections = {};  // for match-pairs: { promptIdx: matchIdx }
-let playerMultiSelected = []; // for mcq-multi: array of selected indices
-let playerQStartTime = 0;
-
-// ── Utility ─────────────────────────────────────────────
-
-function el(id) { return document.getElementById(id); }
-
-function showOnly(...ids) {
-  const all = [
-    'host-waiting','host-settings','host-question','host-reveal','host-leaderboard','host-finished',
-    'player-waiting','player-question','player-answered','player-result','player-leaderboard','player-finished',
-    'screen-error'
-  ];
-  all.forEach(id => el(id)?.classList.add('hidden'));
-  ids.forEach(id => el(id)?.classList.remove('hidden'));
-}
-
-/**
- * Returns an array of { text, isCorrect } for any OQSE item type.
- * Used by mcq-single, true-false, mcq-multi for rendering buttons.
- */
-function getChoices(item) {
-  if (!item) return [];
-  const t = item.type;
-  // true-false
-  if (t === 'true-false') return [
-    { text: 'True ✓',  isCorrect: item.isTrue === true || item.answer === true  },
-    { text: 'False ✗', isCorrect: item.isTrue === false || item.answer === false },
-  ];
-  // mcq-single / mcq-multi: options is string[]
-  if (Array.isArray(item.options)) {
-    return item.options.map((o, i) => ({
-      text: typeof o === 'string' ? o : (o?.text ?? o?.label ?? String(o)),
-      isCorrect: t === 'mcq-multi'
-        ? (item.correctIndices ?? []).includes(i) || o?.isCorrect === true
-        : i === (item.correctIndex ?? -1) || o?.isCorrect === true,
-    }));
-  }
-  // Legacy format: choices: [{text, isCorrect}]
-  if (Array.isArray(item.choices)) return item.choices;
-  // Flashcard fallback
-  if (item.front) return [{ text: item.back, isCorrect: true }, { text: '—', isCorrect: false }];
-  return [];
-}
-
-function getQuestionText(item) {
-  return item?.question ?? item?.statement ?? item?.front ?? item?.text ?? 'Question';
-}
-
-/** Returns correct index (mcq-single / true-false only). */
-function getCorrectIndex(item) {
-  if (!item) return 0;
-    if (item.type === 'true-false') return (item.isTrue === true || item.answer === true) ? 0 : 1;
-    if (typeof item.correctIndex === 'number') return item.correctIndex;
-  return idx >= 0 ? idx : 0;
-}
-
-function buildLeaderboard(players) {
-  return Object.values(players).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-}
-
-function renderLeaderboard(containerId, players) {
-  const container = el(containerId);
-  if (!container) return;
-  const sorted = buildLeaderboard(players);
-  const medals = ['🥇','🥈','🥉'];
-  container.innerHTML = sorted.map((p, i) => `
-    <div class="lb-row">
-      <span class="lb-rank">${medals[i] ?? (i + 1)}</span>
-      <span class="lb-name">${escHtml(p.name)}</span>
-      <span class="lb-score">${p.score ?? 0} ⚡</span>
-    </div>
-  `).join('');
-}
-
-function escHtml(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-/** Levenshtein distance for short-answer fuzzy matching. */
-function levenshtein(a, b) {
-  const m = a.length, n = b.length;
-  const dp = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => i || j));
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = a[i-1] === b[j-1]
-        ? dp[i-1][j-1]
-        : 1 + Math.min(dp[i-1][j-1], dp[i-1][j], dp[i][j-1]);
-  return dp[m][n];
-}
-
-/** Strip common diacritics for ignoreDiacritics matching. */
-function removeDiacritics(s) {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-
-/**
- * Normalize answer text for short-answer comparison according to item flags.
- * @param {string} text
- * @param {{ caseSensitive?: boolean, trimWhitespace?: boolean, ignoreDiacritics?: boolean }} opts
- */
-function normalizeAnswer(text, opts = {}) {
-  let s = String(text ?? '');
-  if (opts.trimWhitespace !== false) s = s.trim();
-  if (!opts.caseSensitive) s = s.toLowerCase();
-  if (opts.ignoreDiacritics) s = removeDiacritics(s);
-  return s;
-}
-
-/**
- * Check whether a short-answer response matches any accepted answer.
- * @param {string} response
- * @param {string[]} acceptedAnswers
- * @param {{ caseSensitive?: boolean, trimWhitespace?: boolean, acceptPartial?: boolean, ignoreDiacritics?: boolean }} opts
- * @returns {boolean}
- */
-function checkShortAnswer(response, acceptedAnswers, opts = {}) {
-  const norm = normalizeAnswer(response, opts);
-  for (const ans of (acceptedAnswers ?? [])) {
-    const normAns = normalizeAnswer(ans, opts);
-    if (norm === normAns) return true;
-    if (opts.acceptPartial) {
-      const maxLen = Math.max(normAns.length, 1);
-      const threshold = maxLen <= 4 ? 0 : maxLen <= 8 ? 1 : 2;
-      if (levenshtein(norm, normAns) <= threshold) return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Check match-pairs answer: pairMap[promptIdx] === correct match index.
- * @param {Record<number,number>} pairMap   Player's mapping: promptIdx → matchIdx
- * @param {string[]} prompts
- * @param {string[]} matches                Ordered answers (prompts[i] matches matches[i])
- * @param {number[]} shuffledOrder          How matches were shuffled for display → [origIdx, ...]
- * @returns {{ correct: number, total: number }}
- */
-function checkMatchPairs(pairMap, prompts, matches, shuffledOrder) {
-  let correct = 0;
-  for (let i = 0; i < prompts.length; i++) {
-    const playerPickedDisplayIdx = pairMap[i];
-    if (playerPickedDisplayIdx === undefined) continue;
-    const origMatchIdx = shuffledOrder[playerPickedDisplayIdx];
-    if (origMatchIdx === i) correct++;
-  }
-  return { correct, total: prompts.length };
-}
-
-function calcPointsForSpeed(timeTakenMs, maxTimeMs) {
-  const speed = Math.max(0, 1 - (timeTakenMs / maxTimeMs));
-  return Math.round(500 + speed * 500); // 500–1000 pts
-}
-
-/** Fisher-Yates shuffle — returns new array */
-function shuffleArray(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-// ══════════════════════════════════════════════════════════
-// HOST LOGIC
-// ══════════════════════════════════════════════════════════
-
-const Plugin = {
-
-  // ── Initialisation ──────────────────────────────────────
-
-  initHost(payload) {
-    hostRunMode = payload?.runMode ?? 'host-game';
-    pin = payload.pin ?? payload.sessionPin ?? '';
-
-    // Consume settings from HostPage
-    if (payload.settings) {
-      hostSettings.timePerQuestion           = Number(payload.settings.timePerQuestion)           || 20;
-      hostSettings.showLeaderboardAfterEvery = Number(payload.settings.showLeaderboardAfterEvery) ?? 0;
-      hostSettings.shuffleQuestions          = Boolean(payload.settings.shuffleQuestions);
-      hostSettings.autoAdvanceReveal         = Number(payload.settings.autoAdvanceReveal)         || 0;
-    }
-
-    const SUPPORTED = ['mcq-single','mcq-multi','true-false','short-answer','match-pairs'];
-    let items = (payload.items ?? []).filter(item => {
-      const t = item?.type;
-      return SUPPORTED.includes(t) || Array.isArray(item?.options) || Array.isArray(item?.choices) || item?.front;
-    });
-    hostBaseItems = items;
-    hostItems = hostSettings.shuffleQuestions ? shuffleArray(hostBaseItems) : [...hostBaseItems];
-
-    hostPlayers = {};
-    (payload.players ?? []).forEach(p => {
-      hostPlayers[p.id] = { ...p, score: p.score ?? 0, answeredThisRound: false };
-    });
-    hostQIndex = 0;
-
-    el('lobby-pin').textContent = pin || '——';
-    this._syncSettingsFormFromState();
-    this._refreshLobbyPlayers();
-    const subtitle = document.querySelector('#host-settings .subtitle');
-    if (subtitle) {
-      subtitle.textContent = hostItems.length > 0
-        ? `${hostItems.length} questions loaded. Continue from the Memizy host flow.`
-        : '⚠️ No supported questions found in this set.';
-    }
-
-    if (hostRunMode === 'host-settings') {
-      showOnly('host-settings');
-      el('host-hud').classList.add('hidden');
-    } else {
-      showOnly('host-waiting');
-      const hostWaiting = el('host-waiting');
-      if (hostWaiting) {
-        hostWaiting.querySelector('p').textContent = 'Waiting for Prepare/Start from Memizy host…';
+    function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function shuffle(arr) {
+      const out = [...arr];
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [out[i], out[j]] = [out[j], out[i]];
       }
-      el('host-hud').classList.add('hidden');
+      return out;
     }
-  },
-
-  onHostPrepareGame(players) {
-    const currentScores = hostPlayers;
-    hostPlayers = {};
-    (players ?? []).forEach(p => {
-      const previous = currentScores[p.id];
-      hostPlayers[p.id] = {
-        ...p,
-        score: previous?.score ?? p.score ?? 0,
-        answeredThisRound: false,
-      };
-    });
-
-    // Final pre-start calculations/prep.
-    hostItems = hostSettings.shuffleQuestions ? shuffleArray(hostBaseItems) : [...hostBaseItems];
-    this._refreshLobbyPlayers();
-    el('hud-player-count').textContent = `${Object.keys(hostPlayers).length} players`;
-
-    if (typeof sdk?.postReadyToStart === 'function') {
-      sdk.postReadyToStart();
+    function getQuestionText(item) {
+      return item?.question ?? item?.statement ?? item?.front ?? item?.text ?? 'Question';
     }
-  },
-
-  onHostStartGame() {
-    this._syncSettingsStateFromForm();
-    hostItems = hostSettings.shuffleQuestions ? shuffleArray(hostBaseItems) : [...hostBaseItems];
-    this.hostStart();
-  },
-
-  // ── Player lifecycle (host side) ─────────────────────────
-
-  onPlayerJoined(player) {
-    hostPlayers[player.id] = { ...player, score: player.score ?? 0, answeredThisRound: false };
-    this._refreshLobbyPlayers();
-    el('hud-player-count').textContent = `${Object.keys(hostPlayers).length} players`;
-  },
-
-  onPlayerLeft(playerId) {
-    delete hostPlayers[playerId];
-    this._refreshLobbyPlayers();
-    el('hud-player-count').textContent = `${Object.keys(hostPlayers).length} players`;
-  },
-
-  // ── Player answer processing ──────────────────────────────
-
-  onPlayerAction(payload) {
-    if (payload.type !== 'answer') return;
-    const data = payload.data ?? {};
-    const pid = data.playerId;
-    if (!pid || hostAnswers[pid] !== undefined) return; // unknown player or already answered
-
-    hostAnswers[pid] = data;
-    if (hostPlayers[pid]) hostPlayers[pid].answeredThisRound = true;
-
-    const total = Object.keys(hostPlayers).length;
-    const answered = Object.keys(hostAnswers).length;
-    el('host-answered-count').textContent = answered;
-    el('host-total-count').textContent = total;
-
-    if (answered >= total && total > 0) this.hostReveal();
-  },
-
-  // ── Lobby helpers ─────────────────────────────────────────
-
-  _refreshLobbyPlayers() {
-    const list  = el('lobby-player-list');
-    const count = el('lobby-player-count');
-    const players = Object.values(hostPlayers);
-    if (count) count.textContent = players.length;
-    if (list) {
-      list.innerHTML = players.map(p => `
-        <li class="player-item">
-          <span>🧑‍🚀 ${escHtml(p.name)}</span>
-          <span class="score">${p.score ?? 0} ⚡</span>
-        </li>
-      `).join('') || '<li style="color:var(--gray-400); font-size:0.9rem">No players yet…</li>';
+    function getChoices(item) {
+      if (!item) return [];
+      if (item.type === 'true-false') return ['True', 'False'];
+      if (Array.isArray(item.options)) return item.options.map((o) => typeof o === 'string' ? o : (o?.text ?? o?.label ?? String(o)));
+      if (Array.isArray(item.choices)) return item.choices.map((c) => c?.text ?? String(c));
+      return [];
     }
-  },
-
-  // ── Game flow ─────────────────────────────────────────────
-
-  hostStart() {
-    if (hostItems.length === 0) return;
-    el('host-hud').classList.remove('hidden');
-    el('hud-q-counter').textContent = `Q 1 / ${hostItems.length}`;
-    el('hud-player-count').textContent = `${Object.keys(hostPlayers).length} players`;
-    this._showQuestion(0);
-  },
-
-  _showQuestion(index) {
-    hostQIndex = index;
-    hostAnswers = {};
-    Object.values(hostPlayers).forEach(p => { p.answeredThisRound = false; });
-
-    const item = hostItems[index];
-    const t = item?.type ?? 'mcq-single';
-    const totalPlayers = Object.keys(hostPlayers).length;
-    const maxTimeMs = hostSettings.timePerQuestion * 1000;
-
-    el('hud-q-counter').textContent = `Q ${index + 1} / ${hostItems.length}`;
-    el('host-q-num').textContent = `Question ${index + 1} of ${hostItems.length}`;
-    el('host-q-text').textContent = getQuestionText(item);
-    el('host-answered-count').textContent = '0';
-    el('host-total-count').textContent = totalPlayers;
-
-    // Render choices preview on host screen
-    const colors = ['#ef4444','#3b82f6','#22c55e','#f59e0b'];
-    if (t === 'short-answer') {
-      const accepted = (item.answers ?? []).map(a => escHtml(a)).join(', ');
-      el('host-answers').innerHTML = `
-        <div style="padding:0.75rem 1rem; background:#f3f4f6; border-radius:0.6rem; color:#374151; font-size:0.9rem">
-          📝 <strong>Short answer</strong> — accepted: ${accepted || '(any text)'}
-        </div>`;
-    } else if (t === 'match-pairs') {
-      const entries = (item.prompts ?? []).map((p, i) =>
-        `<tr><td style="padding:0.4rem 0.8rem;font-weight:700">${escHtml(p)}</td>
-             <td style="padding:0.4rem 0.8rem;color:#6b7280">→</td>
-             <td style="padding:0.4rem 0.8rem">${escHtml((item.matches ?? [])[i] ?? '')}</td></tr>`
-      ).join('');
-      el('host-answers').innerHTML = `
-        <div style="padding:0.5rem;background:#f3f4f6;border-radius:0.6rem;overflow:auto">
-          🔗 <strong>Match pairs</strong>
-          <table style="width:100%;border-collapse:collapse;margin-top:0.4rem">${entries}</table>
-        </div>`;
-    } else {
-      // mcq-single / mcq-multi / true-false
-      const choices = getChoices(item);
-      el('host-answers').innerHTML = choices.map((c, i) => `
-        <div style="background:${colors[i%colors.length]};color:#fff;padding:0.9rem;border-radius:0.6rem;font-weight:700;${c.isCorrect ? 'outline:3px solid white' : ''}">
-          ${c.isCorrect ? '★ ' : ''}${escHtml(c.text ?? c.label ?? '')}
-        </div>
-      `).join('');
-    }
-
-    // Progress bar
-    el('host-progress').style.width = `${((index + 1) / hostItems.length) * 100}%`;
-
-    // Timer
-    this._startTimer('host-timer', hostSettings.timePerQuestion, () => this.hostReveal());
-
-    showOnly('host-question');
-    el('host-hud').classList.remove('hidden');
-
-    this._broadcast({
-      phase: 'question',
-      questionIndex: index,
-      items: hostItems,
-      answers: {},
-      players: hostPlayers,
-      totalQuestions: hostItems.length,
-      maxTimeMs,
-      timestamp: Date.now()
-    });
-  },
-
-  hostReveal() {
-    this._stopTimer();
-    this._stopAutoAdvance();
-    const item = hostItems[hostQIndex];
-    const t = item?.type ?? 'mcq-single';
-    const maxTimeMs = hostSettings.timePerQuestion * 1000;
-    const colors = ['#ef4444','#3b82f6','#22c55e','#f59e0b'];
-    const scoreUpdates = {};
-    const revealExtra = {}; // extra data for players
-
-    el('host-rev-num').textContent = `Question ${hostQIndex + 1} of ${hostItems.length}`;
-    el('host-rev-text').textContent = getQuestionText(item);
-
-    // ── Score & reveal per type ───────────────────────────────
-
-    if (t === 'short-answer') {
-      const answers = item.answers ?? [];
-      const opts = {
-        caseSensitive: item.caseSensitive ?? false,
-        trimWhitespace: item.trimWhitespace !== false,
-        acceptPartial: item.acceptPartial ?? false,
-        ignoreDiacritics: item.ignoreDiacritics ?? false,
-      };
-      Object.entries(hostAnswers).forEach(([pid, data]) => {
-        const correct = checkShortAnswer(data.text ?? '', answers, opts);
-        if (correct) {
-          const pts = calcPointsForSpeed(data.timeTakenMs ?? maxTimeMs, maxTimeMs);
-          if (hostPlayers[pid]) hostPlayers[pid].score = (hostPlayers[pid].score ?? 0) + pts;
-          scoreUpdates[pid] = pts;
-        }
-      });
-      const accepted = (answers).map(a => escHtml(a)).join(' / ');
-      el('host-rev-answers').innerHTML = `
-        <div style="padding:0.75rem 1rem;background:#f0fdf4;border:2px solid #22c55e;border-radius:0.75rem;color:#14532d;font-weight:600">
-          ✅ Correct answer(s): ${accepted}
-        </div>
-        <div style="padding:0.5rem;font-size:0.85rem;color:#6b7280;background:#f3f4f6;border-radius:0.6rem;margin-top:0.5rem">
-          ${Object.entries(hostAnswers).map(([pid, d]) => {
-            const name = hostPlayers[pid]?.name ?? pid;
-            const ok = checkShortAnswer(d.text ?? '', answers, opts);
-            return `<div>${escHtml(name)}: <em>"${escHtml(d.text ?? '')}"</em> ${ok ? '✅' : '❌'}</div>`;
-          }).join('')}
-        </div>`;
-      revealExtra.correctAnswers = answers;
-
-    } else if (t === 'mcq-multi') {
-      const correctIndices = (item.correctIndices ?? []).slice().sort((a,b)=>a-b);
-      Object.entries(hostAnswers).forEach(([pid, data]) => {
-        const sel = (data.selectedIndices ?? []).slice().sort((a,b)=>a-b);
-        const correct = JSON.stringify(sel) === JSON.stringify(correctIndices);
-        if (correct) {
-          const pts = calcPointsForSpeed(data.timeTakenMs ?? maxTimeMs, maxTimeMs);
-          if (hostPlayers[pid]) hostPlayers[pid].score = (hostPlayers[pid].score ?? 0) + pts;
-          scoreUpdates[pid] = pts;
-        }
-      });
-      const choices = getChoices(item);
-      el('host-rev-answers').innerHTML = choices.map((c, i) => `
-        <div style="background:${colors[i%colors.length]};color:#fff;padding:0.9rem;border-radius:0.6rem;font-weight:700;outline:${c.isCorrect ? '4px solid white' : 'none'};opacity:${c.isCorrect ? '1' : '0.5'}">
-          ${c.isCorrect ? '✅ ' : ''}${escHtml(c.text ?? '')}
-        </div>
-      `).join('');
-      revealExtra.correctIndices = correctIndices;
-
-    } else if (t === 'match-pairs') {
-      Object.entries(hostAnswers).forEach(([pid, data]) => {
-        const pairMap = data.pairMap ?? {};
-        const shuffledOrder = data.shuffledOrder ?? (item.matches ?? []).map((_, i) => i);
-        const { correct, total } = checkMatchPairs(pairMap, item.prompts ?? [], item.matches ?? [], shuffledOrder);
-        if (correct > 0) {
-          const ratio = correct / Math.max(total, 1);
-          const pts = Math.round(calcPointsForSpeed(data.timeTakenMs ?? maxTimeMs, maxTimeMs) * ratio);
-          if (hostPlayers[pid]) hostPlayers[pid].score = (hostPlayers[pid].score ?? 0) + pts;
-          scoreUpdates[pid] = pts;
-        }
-      });
-      const entries = (item.prompts ?? []).map((p, i) =>
-        `<tr><td style="padding:0.4rem 0.8rem;font-weight:700">${escHtml(p)}</td>
-             <td style="padding:0.4rem 0.8rem;color:#6b7280">→</td>
-             <td style="padding:0.4rem 0.8rem">${escHtml((item.matches ?? [])[i] ?? '')}</td></tr>`
-      ).join('');
-      el('host-rev-answers').innerHTML = `
-        <div style="padding:0.5rem;background:#f0fdf4;border-radius:0.6rem;overflow:auto">
-          🔗 <strong>Correct pairs:</strong>
-          <table style="width:100%;border-collapse:collapse;margin-top:0.4rem">${entries}</table>
-        </div>`;
-      revealExtra.correctPairs = (item.prompts ?? []).map((p, i) => ({ prompt: p, match: (item.matches ?? [])[i] }));
-
-    } else {
-      // mcq-single / true-false
-      const correctIdx = getCorrectIndex(item);
-      const choices = getChoices(item);
-      Object.entries(hostAnswers).forEach(([pid, data]) => {
-        if ((data.optionIndex ?? data) === correctIdx) {
-          const pts = calcPointsForSpeed(data.timeTakenMs ?? maxTimeMs, maxTimeMs);
-          if (hostPlayers[pid]) hostPlayers[pid].score = (hostPlayers[pid].score ?? 0) + pts;
-          scoreUpdates[pid] = pts;
-        }
-      });
-      el('host-rev-answers').innerHTML = choices.map((c, i) => `
-        <div style="background:${colors[i%colors.length]};color:#fff;padding:0.9rem;border-radius:0.6rem;font-weight:700;outline:${i===correctIdx ? '4px solid white' : 'none'};opacity:${i===correctIdx ? '1' : '0.5'}">
-          ${i === correctIdx ? '✅ ' : ''}${escHtml(c.text ?? '')}
-        </div>
-      `).join('');
-      revealExtra.correctIndex = correctIdx;
-    }
-
-    showOnly('host-reveal');
-    el('host-hud').classList.remove('hidden');
-
-    // Auto-advance to next question after a countdown (if enabled)
-    if (hostSettings.autoAdvanceReveal > 0) {
-      this._startAutoAdvance('auto-advance-countdown', hostSettings.autoAdvanceReveal, () => this.hostNext());
-    } else {
-      const cd = el('auto-advance-countdown');
-      if (cd) cd.style.display = 'none';
-    }
-
-    this._broadcast({
-      phase: 'reveal',
-      questionIndex: hostQIndex,
-      items: hostItems,
-      answers: hostAnswers,
-      players: hostPlayers,
-      scoreUpdates,
-      totalQuestions: hostItems.length,
-      ...revealExtra,
-      timestamp: Date.now()
-    });
-  },
-
-  hostNext() {
-    this._stopAutoAdvance();
-    const nextIndex = hostQIndex + 1;
-    if (nextIndex >= hostItems.length) {
-      this._showFinalLeaderboard();
-      return;
-    }
-    const interval = hostSettings.showLeaderboardAfterEvery;
-    if (interval > 0 && (hostQIndex + 1) % interval === 0) {
-      this._showInterimLeaderboard(nextIndex);
-    } else {
-      this._showQuestion(nextIndex);
-    }
-  },
-
-  _showInterimLeaderboard(nextIndex) {
-    renderLeaderboard('host-leaderboard', hostPlayers);
-    showOnly('host-leaderboard');
-    el('host-hud').classList.remove('hidden');
-
-    // Auto-advance to next question after a countdown (if enabled)
-    if (hostSettings.autoAdvanceReveal > 0) {
-      this._startAutoAdvance('auto-advance-lb-countdown', hostSettings.autoAdvanceReveal, () => this.hostNextAfterLb());
-    } else {
-      const cd = el('auto-advance-lb-countdown');
-      if (cd) cd.style.display = 'none';
-    }
-
-    this._broadcast({
-      phase: 'leaderboard',
-      questionIndex: hostQIndex,
-      items: hostItems,
-      answers: {},
-      players: hostPlayers,
-      nextQuestionIndex: nextIndex,
-      totalQuestions: hostItems.length,
-      timestamp: Date.now()
-    });
-  },
-
-  hostNextAfterLb() {
-    this._stopAutoAdvance();
-    const nextIndex = hostQIndex + 1;
-    if (nextIndex >= hostItems.length) {
-      this._showFinalLeaderboard();
-    } else {
-      this._showQuestion(nextIndex);
-    }
-  },
-
-  _showFinalLeaderboard() {
-    renderLeaderboard('host-final-lb', hostPlayers);
-    showOnly('host-finished');
-    el('host-hud').classList.remove('hidden');
-
-    this._broadcast({
-      phase: 'finished',
-      questionIndex: hostQIndex,
-      items: hostItems,
-      answers: {},
-      players: hostPlayers,
-      totalQuestions: hostItems.length,
-      timestamp: Date.now()
-    });
-
-    setTimeout(() => {
-      window.parent.postMessage({ type: 'SESSION_COMPLETED', payload: { scores: hostPlayers } }, '*');
-    }, 3000);
-  },
-
-  forceEndGame() {
-    this._stopTimer();
-    this._stopAutoAdvance();
-    this._showFinalLeaderboard();
-  },
-
-  _broadcast(state) { sdkBroadcastState(state); },
-
-  _startTimer(elId, seconds, onExpire) {
-    this._stopTimer();
-    hostTimerValue = seconds;
-    el(elId).textContent = seconds;
-    hostTimerInterval = setInterval(() => {
-      hostTimerValue--;
-      el(elId).textContent = hostTimerValue;
-      el(elId).style.color = hostTimerValue <= 5 ? '#dc2626' : '#f97316';
-      if (hostTimerValue <= 0) { this._stopTimer(); onExpire(); }
-    }, 1000);
-  },
-
-  _stopTimer() {
-    if (hostTimerInterval) { clearInterval(hostTimerInterval); hostTimerInterval = null; }
-  },
-
-  /**
-   * Start a visible countdown that calls onExpire() when it reaches 0.
-   * Used for auto-advancing through the reveal and leaderboard screens.
-   * @param {string} countdownElId  ID of the <span> to show the countdown in
-   * @param {number} seconds
-   * @param {Function} onExpire
-   */
-  _startAutoAdvance(countdownElId, seconds, onExpire) {
-    if (hostAutoAdvanceInterval) { clearInterval(hostAutoAdvanceInterval); hostAutoAdvanceInterval = null; }
-    let remaining = seconds;
-    const span = el(countdownElId);
-    if (span) { span.style.display = 'block'; span.textContent = remaining; }
-    hostAutoAdvanceInterval = setInterval(() => {
-      remaining--;
-      if (span) span.textContent = remaining;
-      if (remaining <= 0) {
-        clearInterval(hostAutoAdvanceInterval);
-        hostAutoAdvanceInterval = null;
-        if (span) span.style.display = 'none';
-        onExpire();
+    function getCorrectIndex(item) {
+      if (!item) return 0;
+      if (item.type === 'true-false') return item.isTrue === true || item.answer === true ? 0 : 1;
+      if (typeof item.correctIndex === 'number') return item.correctIndex;
+      if (Array.isArray(item.choices)) {
+        const idx = item.choices.findIndex((c) => c?.isCorrect === true);
+        if (idx >= 0) return idx;
       }
-    }, 1000);
-  },
-
-  _stopAutoAdvance() {
-    if (hostAutoAdvanceInterval) { clearInterval(hostAutoAdvanceInterval); hostAutoAdvanceInterval = null; }
-  },
-
-  _syncSettingsFormFromState() {
-    const timeEl = el('setting-time-per-question');
-    const lbEl = el('setting-leaderboard-every');
-    const autoEl = el('setting-auto-advance');
-    const shuffleEl = el('setting-shuffle-questions');
-    if (timeEl) timeEl.value = String(hostSettings.timePerQuestion ?? 20);
-    if (lbEl) lbEl.value = String(hostSettings.showLeaderboardAfterEvery ?? 0);
-    if (autoEl) autoEl.value = String(hostSettings.autoAdvanceReveal ?? 0);
-    if (shuffleEl) shuffleEl.checked = Boolean(hostSettings.shuffleQuestions);
-  },
-
-  _syncSettingsStateFromForm() {
-    const timeEl = el('setting-time-per-question');
-    const lbEl = el('setting-leaderboard-every');
-    const autoEl = el('setting-auto-advance');
-    const shuffleEl = el('setting-shuffle-questions');
-    hostSettings.timePerQuestion = Math.max(5, Number(timeEl?.value) || hostSettings.timePerQuestion || 20);
-    hostSettings.showLeaderboardAfterEvery = Math.max(0, Number(lbEl?.value) || 0);
-    hostSettings.autoAdvanceReveal = Math.max(0, Number(autoEl?.value) || 0);
-    hostSettings.shuffleQuestions = Boolean(shuffleEl?.checked);
-  },
-
-  // ══════════════════════════════════════════════════════════
-  // PLAYER LOGIC
-  // ══════════════════════════════════════════════════════════
-
-  initPlayer(payload) {
-    playerRunMode = payload?.runMode ?? 'client-game';
-    pin = payload.pin ?? payload.sessionPin ?? '';
-    playerName = payload.playerName ?? 'Player';
-    myPlayerId = payload.playerId ?? '';
-    playerScore = 0;
-
-    el('player-name-display').textContent = `Ready, ${playerName}!`;
-    el('player-pin-display').textContent = pin;
-    el('player-count-display').textContent = `${(payload.players ?? []).length} players in lobby`;
-    showOnly('player-waiting');
-  },
-
-  onPlayerPrepareGame(players) {
-    const count = (players ?? []).length;
-    const playerCount = el('player-count-display');
-    if (playerCount) playerCount.textContent = `${count} players in session`;
-    if (typeof sdk?.postReadyToStart === 'function') {
-      sdk.postReadyToStart();
+      return 0;
     }
-  },
-
-  onPlayerStartGame() {
-    if (playerRunMode === 'client-game') {
-      el('player-q-num').textContent = 'Get ready';
-      el('player-q-text').textContent = 'Host started the game. First question incoming...';
-      el('player-progress').style.width = '0%';
-      el('player-answers').innerHTML = '<button class="btn btn-ghost btn-full" disabled>Waiting for first question…</button>';
-      el('player-answers').classList.remove('hidden');
-      el('player-short-answer').classList.add('hidden');
-      el('player-match-pairs').classList.add('hidden');
-      el('player-timer').textContent = '--';
-      showOnly('player-question');
+    function buildRows(scores) {
+      return sdk.room.getPlayers()
+        .map((p) => ({ id: p.id, name: p.name, score: scores[p.id] ?? 0 }))
+        .sort((a, b) => b.score - a.score);
     }
-  },
-
-  onStateUpdate(state) {
-    if (!state?.phase) return;
-    if (state.players?.[myPlayerId]) playerScore = state.players[myPlayerId].score ?? 0;
-    switch (state.phase) {
-      case 'question':    this._playerShowQuestion(state);    break;
-      case 'reveal':      this._playerShowReveal(state);      break;
-      case 'leaderboard': this._playerShowLeaderboard(state); break;
-      case 'finished':    this._playerShowFinished(state);    break;
+    function renderBoard(containerId, rows) {
+      const root = el(containerId);
+      root.innerHTML = rows.map((r, i) => `<div class="lb-row"><span>${i + 1}. ${esc(r.name)}</span><strong>${r.score}</strong></div>`).join('');
     }
-  },
-
-  _playerShowQuestion(state) {
-    playerLastAnswer = null;
-    playerMpSelections = {};
-    playerMultiSelected = [];
-
-    const item = (state.items ?? [])[state.questionIndex];
-    if (!item) return;
-    const t = item.type ?? 'mcq-single';
-    const total = state.totalQuestions ?? (state.items ?? []).length;
-    const maxTimeMs = state.maxTimeMs ?? 20000;
-
-    playerQStartTime = state.timestamp ?? Date.now();
-
-    el('player-q-num').textContent = `Question ${state.questionIndex + 1} of ${total}`;
-    el('player-q-text').textContent = getQuestionText(item);
-
-    const pct = ((state.questionIndex + 1) / total) * 100;
-    el('player-progress').style.width = pct + '%';
-
-    // Hide all sub-UIs first
-    el('player-answers').innerHTML = '';
-    el('player-answers').classList.remove('hidden');
-    el('player-short-answer').classList.add('hidden');
-    el('player-match-pairs').classList.add('hidden');
-
-    if (t === 'short-answer') {
-      // ── Short answer ──────────────────────────────────────
-      el('player-answers').classList.add('hidden');
-      el('player-short-answer').classList.remove('hidden');
-      el('player-sa-input').value = '';
-      setTimeout(() => el('player-sa-input').focus(), 50);
-
-    } else if (t === 'match-pairs') {
-      // ── Match pairs ───────────────────────────────────────
-      el('player-answers').classList.add('hidden');
-      el('player-match-pairs').classList.remove('hidden');
-      const prompts = item.prompts ?? [];
-      const matches = item.matches ?? [];
-      // Shuffle the matches column for display; store the shuffled order so host can check
-      const shuffledOrder = shuffleArray(matches.map((_, i) => i)); // [origIdx, ...]
-      const shuffledMatches = shuffledOrder.map(i => matches[i]);
-      playerMpSelections._shuffledOrder = shuffledOrder;
-
-      el('player-match-pairs').innerHTML = `
-        <div style="font-size:0.85rem;color:#6b7280;margin-bottom:0.5rem">Select the correct pair for each prompt:</div>
-        ${prompts.map((p, pi) => `
-          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:0.5rem;align-items:center;margin-bottom:0.5rem">
-            <div style="padding:0.6rem 0.8rem;background:#f3f4f6;border-radius:0.5rem;font-weight:600">${escHtml(p)}</div>
-            <div style="color:#6b7280;font-size:1.2rem">↔</div>
-            <select id="mp-select-${pi}" onchange="Plugin._mpSelect(${pi}, this.value)"
-              style="padding:0.6rem;border:2px solid #e5e7eb;border-radius:0.5rem;font-size:0.95rem;background:#fff">
-              <option value="">— choose —</option>
-              ${shuffledMatches.map((m, mi) => `<option value="${mi}">${escHtml(m)}</option>`).join('')}
-            </select>
-          </div>
-        `).join('')}
-        <button class="btn btn-primary" style="margin-top:0.5rem;width:100%" onclick="Plugin.playerSubmitMatchPairs()">
-          Submit ✓
-        </button>`;
-
-    } else if (t === 'mcq-multi') {
-      // ── MCQ multi-select ──────────────────────────────────
-      const choices = getChoices(item);
-      const colors = ['#ef4444','#3b82f6','#22c55e','#f59e0b'];
-      const labels = ['A','B','C','D'];
-      el('player-answers').innerHTML = choices.map((c, i) => `
-        <button class="answer-btn" id="multi-btn-${i}"
-          style="background:${colors[i%colors.length]};opacity:0.75"
-          onclick="Plugin._multiToggle(${i})">
-          <strong>${labels[i]}:</strong> ${escHtml(c.text ?? '')}
-        </button>
-      `).join('') + `
-        <button class="btn btn-primary" style="grid-column:1/-1;margin-top:0.25rem" onclick="Plugin.playerSubmitMulti(${JSON.stringify(playerQStartTime)})">
-          Submit selection ✓
-        </button>`;
-
-    } else {
-      // ── MCQ single / true-false ───────────────────────────
-      const choices = getChoices(item);
-      const colors  = t === 'true-false' ? ['#22c55e','#ef4444'] : ['#ef4444','#3b82f6','#22c55e','#f59e0b'];
-      const labels  = ['A','B','C','D'];
-      el('player-answers').innerHTML = choices.map((c, i) => `
-        <button class="answer-btn"
-          style="background:${colors[i%colors.length]}"
-          onclick="Plugin.playerAnswer(${i}, ${playerQStartTime})">
-          ${t !== 'true-false' ? `<strong>${labels[i]}:</strong> ` : ''}${escHtml(c.text ?? '')}
-        </button>
-      `).join('');
+    async function pushSettings() {
+      const timerSec = Math.max(5, Number(el('setting-timer').value || 20));
+      const shuffleQuestions = Boolean(el('setting-shuffle').checked);
+      await sdk.settings.set({ timerSec, shuffleQuestions });
+      await sdk.settings.setValid(true);
+    }
+    function stopTimer() {
+      if (host.timerId) {
+        clearInterval(host.timerId);
+        host.timerId = null;
+      }
     }
 
-    // Cosmetic timer
-    const timeLeft = Math.max(0, Math.round(maxTimeMs / 1000) - Math.round((Date.now() - playerQStartTime) / 1000));
-    this._startPlayerTimer('player-timer', timeLeft);
+    async function showHostQuestion(index) {
+      const state = sdk.host.getState();
+      if (!state) return;
+      await sdk.host.updateState((draft) => {
+        draft.phase = 'question';
+        draft.currentIndex = index;
+        draft.answers = {};
+        draft.reveal = null;
+        draft.timeRemaining = draft.timerSec;
+      });
+      await startTimer();
+      renderHost(sdk.host.getState());
+    }
 
-    showOnly('player-question');
-  },
+    async function startTimer() {
+      stopTimer();
+      host.timerId = setInterval(async () => {
+        const state = sdk.host.getState();
+        if (!state || state.phase !== 'question') return;
+        const next = Math.max(0, (state.timeRemaining ?? 0) - 1);
+        await sdk.host.updateState((draft) => { draft.timeRemaining = next; });
+        if (next <= 0) await revealQuestion();
+      }, 1000);
+    }
 
-  /** MCQ-single / true-false answer */
-  playerAnswer(optionIndex, questionStartTime) {
-    if (playerLastAnswer !== null) return;
-    playerLastAnswer = { type: 'single', optionIndex };
-    this._stopPlayerTimer();
-    const timeTakenMs = Date.now() - questionStartTime;
-    el('player-answers').querySelectorAll('.answer-btn').forEach((b, i) => {
-      b.disabled = true;
-      if (i === optionIndex) b.style.outline = '4px solid white';
+    async function revealQuestion() {
+      const state = sdk.host.getState();
+      if (!state || state.phase !== 'question') return;
+      stopTimer();
+      const item = state.items[state.currentIndex];
+      const correctIndex = getCorrectIndex(item);
+      await sdk.host.updateState((draft) => {
+        draft.phase = 'reveal';
+        draft.reveal = { correctIndex, results: {} };
+        draft.lastScoreDelta = {};
+        Object.keys(draft.answers).forEach((pid) => {
+          const correct = Number(draft.answers[pid]?.optionIndex) === correctIndex;
+          draft.reveal.results[pid] = { correct };
+          if (correct) {
+            draft.scores[pid] = (draft.scores[pid] ?? 0) + 100;
+            draft.lastScoreDelta[pid] = 100;
+          } else {
+            draft.lastScoreDelta[pid] = 0;
+          }
+        });
+      });
+      renderHost(sdk.host.getState());
+    }
+
+    async function hostNext() {
+      const state = sdk.host.getState();
+      if (!state) return;
+      const next = state.currentIndex + 1;
+      if (next >= state.items.length) {
+        stopTimer();
+        await sdk.host.endGame({ scores: state.scores ?? {} });
+        return;
+      }
+      await showHostQuestion(next);
+    }
+
+    async function forceEndGame() {
+      stopTimer();
+      const scores = sdk.host.getState()?.scores ?? {};
+      await sdk.host.endGame({ scores });
+    }
+
+    async function submitAnswer(optionIndex) {
+      const state = sdk.player.state;
+      if (!state || state.phase !== 'question') return;
+      if (state.answers?.[player.myId]) return;
+      await sdk.player.sendAction('answer', { optionIndex });
+    }
+
+    function renderHost(state) {
+      if (!state) return;
+      const item = state.items[state.currentIndex];
+      el('host-answered').textContent = String(Object.keys(state.answers ?? {}).length);
+      el('host-total').textContent = String(sdk.room.getPlayers().length);
+      el('host-time').textContent = String(state.timeRemaining ?? 0);
+
+      if (state.phase === 'question') {
+        showScreen('host-question');
+        el('host-q-title').textContent = `Question ${state.currentIndex + 1} / ${state.items.length}`;
+        el('host-q-text').textContent = getQuestionText(item);
+        el('host-q-choices').innerHTML = getChoices(item).map((c) => `<button class="answer-btn" disabled>${esc(c)}</button>`).join('');
+      }
+
+      if (state.phase === 'reveal') {
+        showScreen('host-reveal');
+        const correctIndex = state.reveal?.correctIndex ?? 0;
+        el('host-reveal-title').textContent = `Reveal ${state.currentIndex + 1} / ${state.items.length}`;
+        el('host-reveal-text').textContent = getQuestionText(item);
+        el('host-reveal-choices').innerHTML = getChoices(item).map((c, i) =>
+          `<button class="answer-btn" disabled style="${i === correctIndex ? 'outline:3px solid #fff;' : 'opacity:0.5;'}">${esc(c)}</button>`
+        ).join('');
+      }
+    }
+
+    function renderPlayer(state) {
+      if (!state) return;
+      const item = state.items[state.currentIndex];
+      if (state.phase === 'question') {
+        if (state.answers?.[player.myId]) {
+          showScreen('player-answered');
+          return;
+        }
+        showScreen('player-question');
+        el('player-q-title').textContent = `Question ${state.currentIndex + 1} / ${state.items.length}`;
+        el('player-q-text').textContent = getQuestionText(item);
+        el('player-time').textContent = String(state.timeRemaining ?? 0);
+        el('player-q-choices').innerHTML = getChoices(item).map((c, i) =>
+          `<button class="answer-btn" data-idx="${i}">${esc(c)}</button>`
+        ).join('');
+        el('player-q-choices').querySelectorAll('button').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            await submitAnswer(Number(btn.getAttribute('data-idx')));
+          });
+        });
+      }
+      if (state.phase === 'reveal') {
+        showScreen('player-reveal');
+        const correct = state.reveal?.results?.[player.myId]?.correct === true;
+        const delta = state.lastScoreDelta?.[player.myId] ?? 0;
+        el('player-result').textContent = correct ? 'Correct!' : 'Incorrect';
+        el('player-score-msg').textContent = correct ? `+${delta} points` : 'No points this round';
+      }
+    }
+
+    el('setting-timer').addEventListener('change', async () => { await pushSettings(); });
+    el('setting-shuffle').addEventListener('change', async () => { await pushSettings(); });
+    el('host-reveal-btn').addEventListener('click', async () => { await revealQuestion(); });
+    el('host-next-btn').addEventListener('click', async () => { await hostNext(); });
+    el('host-end-btn').addEventListener('click', async () => { await forceEndGame(); });
+
+    sdk.onInit(async (init) => {
+      if (init.role === 'host') {
+        host.init = init;
+        el('host-pin').textContent = init.pin ?? '----';
+        showScreen('host-settings');
+        await pushSettings();
+        await sdk.room.hostReady();
+        return;
+      }
+      player.myId = init.self.id;
+      el('player-name').textContent = `Ready, ${init.self.name}`;
+      showScreen('player-waiting');
+      await sdk.room.clientReady();
     });
-    sdkSendAction('answer', { playerId: myPlayerId, optionIndex, timeTakenMs });
-    el('player-ans-icon').textContent = '📡';
-    el('player-ans-msg').textContent = 'Answer submitted!';
-    showOnly('player-answered');
-  },
 
-  /** MCQ-multi: toggle a button */
-  _multiToggle(index) {
-    if (playerLastAnswer !== null) return;
-    const btn = el(`multi-btn-${index}`);
-    const pos = playerMultiSelected.indexOf(index);
-    if (pos === -1) {
-      playerMultiSelected.push(index);
-      btn.style.opacity = '1';
-      btn.style.outline = '3px solid white';
-    } else {
-      playerMultiSelected.splice(pos, 1);
-      btn.style.opacity = '0.75';
-      btn.style.outline = 'none';
-    }
-  },
+    sdk.onStartGameRequested(async () => {
+      if (sdk.room.role !== 'host') return;
+      await pushSettings();
+      const settings = sdk.settings.get() ?? {};
+      const timerSec = Math.max(5, Number(settings.timerSec ?? 20));
+      const shuffleQuestions = Boolean(settings.shuffleQuestions);
+      const sourceItems = host.init?.items ?? [];
+      const items = sourceItems.filter((i) => i?.type === 'mcq-single' || i?.type === 'true-false' || Array.isArray(i?.options));
+      const activeItems = shuffleQuestions ? shuffle(items) : items.slice();
+      const scores = {};
+      sdk.room.getPlayers().forEach((p) => { scores[p.id] = 0; });
 
-  /** MCQ-multi: submit selected indices */
-  playerSubmitMulti(questionStartTime) {
-    if (playerLastAnswer !== null) return;
-    if (playerMultiSelected.length === 0) { alert('Please select at least one option.'); return; }
-    playerLastAnswer = { type: 'multi', selectedIndices: [...playerMultiSelected] };
-    this._stopPlayerTimer();
-    const timeTakenMs = Date.now() - questionStartTime;
-    el('player-answers').querySelectorAll('.answer-btn').forEach(b => b.disabled = true);
-    sdkSendAction('answer', { playerId: myPlayerId, selectedIndices: [...playerMultiSelected], timeTakenMs });
-    el('player-ans-icon').textContent = '📡';
-    el('player-ans-msg').textContent = 'Answers submitted!';
-    showOnly('player-answered');
-  },
+      host.ready = new Set();
+      host.started = false;
 
-  /** Short-answer: submit text */
-  playerSubmitShortAnswer() {
-    if (playerLastAnswer !== null) return;
-    const text = el('player-sa-input').value.trim();
-    if (!text) { el('player-sa-input').focus(); return; }
-    playerLastAnswer = { type: 'short', text };
-    this._stopPlayerTimer();
-    const timeTakenMs = Date.now() - playerQStartTime;
-    el('player-sa-input').disabled = true;
-    sdkSendAction('answer', { playerId: myPlayerId, text, timeTakenMs });
-    el('player-ans-icon').textContent = '📡';
-    el('player-ans-msg').textContent = 'Answer submitted!';
-    showOnly('player-answered');
-  },
+      await sdk.host.setState({
+        phase: 'question',
+        currentIndex: 0,
+        timerSec,
+        timeRemaining: timerSec,
+        items: activeItems,
+        answers: {},
+        scores,
+        reveal: null,
+        lastScoreDelta: {},
+      });
 
-  /** Match-pairs: track selection */
-  _mpSelect(promptIdx, value) {
-    playerMpSelections[promptIdx] = value === '' ? undefined : Number(value);
-  },
-
-  /** Match-pairs: submit all pair selections */
-  playerSubmitMatchPairs() {
-    if (playerLastAnswer !== null) return;
-    const prompts = el('player-match-pairs')?.querySelectorAll('select') ?? [];
-    if (prompts.length === 0) return;
-    // Check all selected
-    let allFilled = true;
-    prompts.forEach((sel, i) => {
-      if (sel.value === '') { allFilled = false; sel.style.border = '2px solid #ef4444'; }
+      await sdk.room.startGame();
+      renderHost(sdk.host.getState());
     });
-    if (!allFilled) { alert('Please match all pairs before submitting.'); return; }
-    const pairMap = {};
-    prompts.forEach((sel, i) => { pairMap[i] = Number(sel.value); });
-    playerLastAnswer = { type: 'match', pairMap };
-    this._stopPlayerTimer();
-    const timeTakenMs = Date.now() - playerQStartTime;
-    prompts.forEach(s => s.disabled = true);
-    sdkSendAction('answer', {
-      playerId: myPlayerId,
-      pairMap,
-      shuffledOrder: playerMpSelections._shuffledOrder ?? [],
-      timeTakenMs
+
+    sdk.onPlayerReady(async (playerId) => {
+      if (sdk.room.role !== 'host') return;
+      host.ready.add(playerId);
+      const total = sdk.room.getPlayers().length;
+      if (!host.started && total > 0 && host.ready.size >= total) {
+        host.started = true;
+        await sdk.room.startGame();
+        await showHostQuestion(0);
+      }
     });
-    el('player-ans-icon').textContent = '📡';
-    el('player-ans-msg').textContent = 'Pairs submitted!';
-    showOnly('player-answered');
-  },
 
-  _playerShowReveal(state) {
-    this._stopPlayerTimer();
-    const item = (state.items ?? [])[state.questionIndex];
-    const t = item?.type ?? 'mcq-single';
-    const pts = state.scoreUpdates?.[myPlayerId] ?? 0;
-    const isCorrect = pts > 0;
+    sdk.onPlayerAction(async (playerId, action) => {
+      if (sdk.room.role !== 'host') return;
+      if (action?.type !== 'answer') return;
+      const state = sdk.host.getState();
+      if (!state || state.phase !== 'question') return;
+      if (state.answers?.[playerId]) return;
+      await sdk.host.updateState((draft) => { draft.answers[playerId] = action.data ?? {}; });
+      renderHost(sdk.host.getState());
+      const answered = Object.keys(sdk.host.getState()?.answers ?? {}).length;
+      const total = sdk.room.getPlayers().length;
+      if (total > 0 && answered >= total) await revealQuestion();
+    });
 
-    el('player-result-badge').textContent = isCorrect ? '✅' : '❌';
-    el('player-result-pts').textContent = isCorrect ? `+${pts} ⚡ fuel` : 'No fuel this round';
+    sdk.onState((state) => {
+      if (sdk.room.role === 'player') renderPlayer(state);
+    });
 
-    if (t === 'short-answer') {
-      const text = (playerLastAnswer?.text ?? '—');
-      el('player-result-text').innerHTML =
-        `${isCorrect ? 'Correct!' : 'Incorrect'}<br>
-         <small style="color:#6b7280">Your answer: "${escHtml(text)}"</small>`;
-    } else if (t === 'match-pairs') {
-      el('player-result-text').textContent = isCorrect ? 'Correct pairs! 🎉' : 'Incorrect — check the correct pairs below';
-    } else if (t === 'mcq-multi') {
-      el('player-result-text').textContent = isCorrect ? 'Correct! All right options! 🎉' : 'Incorrect — not all correct options selected';
-    } else {
-      el('player-result-text').textContent = isCorrect ? 'Correct! 🎉' : 'Incorrect';
+    sdk.onGameEnd((result) => {
+      stopTimer();
+      const rows = buildRows(result?.scores ?? {});
+      if (sdk.room.role === 'host') {
+        renderBoard('host-final-board', rows);
+        showScreen('host-finished');
+      } else {
+        renderBoard('player-final-board', rows);
+        showScreen('player-finished');
+      }
+    });
+
+    try {
+      await sdk.connect();
+    } catch (error) {
+      console.error('Failed to connect SDK', error);
+      el('error-text').textContent = 'Failed to connect to the host app.';
+      showScreen('error-screen');
     }
-
-    showOnly('player-result');
-
-    if (state.players) setTimeout(() => renderLeaderboard('player-lb', state.players), 100);
-  },
-
-  _playerShowLeaderboard(state) {
-    if (state.players) renderLeaderboard('player-lb', state.players);
-    showOnly('player-leaderboard');
-  },
-
-  _playerShowFinished(state) {
-    if (state.players) renderLeaderboard('player-final-lb', state.players);
-    showOnly('player-finished');
-  },
-
-  _playerTimerInterval: null,
-
-  _startPlayerTimer(elId, seconds) {
-    this._stopPlayerTimer();
-    let remaining = seconds;
-    el(elId).textContent = remaining;
-    this._playerTimerInterval = setInterval(() => {
-      remaining--;
-      el(elId).textContent = remaining;
-      el(elId).style.color = remaining <= 5 ? '#dc2626' : '#f97316';
-      if (remaining <= 0) this._stopPlayerTimer();
-    }, 1000);
-  },
-
-  _stopPlayerTimer() {
-    if (this._playerTimerInterval) { clearInterval(this._playerTimerInterval); this._playerTimerInterval = null; }
-  },
-};
-
-// ── Bootstrap via SDK (host/player in iframe, landing page when standalone) ──
-bootstrapSdkRuntime();
-</script>
+  </script>
 </body>
 </html>
