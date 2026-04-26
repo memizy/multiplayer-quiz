@@ -28,14 +28,12 @@
     "capabilities": {
       "actions": ["render"],
       "types": [
-        "flashcard",
         "mcq-single",
         "mcq-multi",
         "true-false",
         "match-pairs",
         "sort-items",
-        "short-answer",
-        "note"
+        "short-answer"
       ],
       "assets": { "image": null, "audio": null, "video": null, "model": null },
       "features": [
@@ -260,8 +258,6 @@
       if (item.type === 'short-answer') return 'short-answer';
       if (item.type === 'match-pairs') return 'match-pairs';
       if (item.type === 'sort-items') return 'sort-items';
-      if (item.type === 'flashcard') return 'flashcard';
-      if (item.type === 'note') return 'note';
       return 'mcq-single';
     }
     function getChoices(item) {
@@ -362,9 +358,6 @@
           : [];
         return arraysEqual(expectedOrder, submitted);
       }
-      if (type === 'flashcard' || type === 'note') {
-        return answerData?.ack === true;
-      }
       return false;
     }
     function getRevealMarkup(item, reveal) {
@@ -399,9 +392,6 @@
         const expected = getSortExpectedOrder(item);
         const ordered = expected.map((idx) => choices[idx]).filter(Boolean);
         return `<div class="card"><p><strong>Correct order:</strong></p><ol>${ordered.map((choice) => `<li>${esc(choice)}</li>`).join('')}</ol></div>`;
-      }
-      if (type === 'flashcard' || type === 'note') {
-        return `<div class="card"><p><strong>Acknowledged.</strong> Continue to next item.</p></div>`;
       }
       return '';
     }
@@ -575,8 +565,6 @@
             el('host-q-choices').innerHTML = '<div class="card"><p>Players submit left/right matches.</p></div>';
           } else if (type === 'sort-items') {
             el('host-q-choices').innerHTML = '<div class="card"><p>Players submit the correct ordering.</p></div>';
-          } else if (type === 'flashcard' || type === 'note') {
-            el('host-q-choices').innerHTML = '<div class="card"><p>Players acknowledge this informational card.</p></div>';
           } else {
             el('host-q-choices').innerHTML = '';
           }
@@ -681,16 +669,6 @@
               return Number(select?.value ?? idx);
             });
             await submitAnswer({ orderedIndices });
-          });
-        } else if (type === 'flashcard' || type === 'note') {
-          el('player-q-choices').innerHTML = `
-            <div class="card">
-              <p>Read the content and continue when ready.</p>
-              <div class="submit-wrap"><button id="player-submit-ack" class="btn">I'm ready</button></div>
-            </div>
-          `;
-          el('player-submit-ack').addEventListener('click', async () => {
-            await submitAnswer({ ack: true });
           });
         } else {
           el('player-q-choices').innerHTML = '';
@@ -810,8 +788,7 @@
             : type === 'short-answer' ? typeof data.text === 'string'
               : type === 'match-pairs' ? Array.isArray(data.pairs)
                 : type === 'sort-items' ? Array.isArray(data.orderedIndices)
-                  : (type === 'flashcard' || type === 'note') ? data.ack === true
-                    : false;
+                  : false;
       if (!isValidPayload) return;
       await sdk.host.updateState((draft) => { draft.answers[playerId] = data; });
       render(sdk.host.getState());
