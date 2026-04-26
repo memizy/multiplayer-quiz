@@ -133,7 +133,11 @@
         </div>
         <div class="row">
           <label for="setting-leaderboard-duration">Leaderboard duration (seconds)</label>
-          <input id="setting-leaderboard-duration" type="number" min="0" value="5" />
+          <input id="setting-leaderboard-duration" type="number" min="0" step="1" value="0" />
+        </div>
+        <div class="row">
+          <label for="setting-question-count">Questions in quiz</label>
+          <input id="setting-question-count" type="number" min="1" step="1" value="10" />
         </div>
         <div class="row">
           <label for="setting-shuffle">Shuffle questions</label>
@@ -171,6 +175,7 @@
       <h1>Game Finished</h1>
       <div id="host-final-board" class="leaderboard"></div>
       <div class="row center">
+        <button id="host-back-btn" class="btn btn-secondary">Back...</button>
         <button id="host-close-room-btn" class="btn btn-secondary">Close Room</button>
       </div>
     </section>
@@ -196,6 +201,9 @@
     <section id="player-finished" class="screen">
       <h1>Game Finished</h1>
       <div id="player-final-board" class="leaderboard"></div>
+      <div class="row center">
+        <button id="player-back-btn" class="btn btn-secondary">Back...</button>
+      </div>
     </section>
 
     <section id="error-screen" class="screen">
@@ -407,9 +415,12 @@
     async function pushSettings() {
       const timerSec = Math.max(5, Number(el('setting-timer').value || 20));
       const revealDuration = Math.max(2, Number(el('setting-reveal-duration').value || 5));
-      const leaderboardDuration = Math.max(0, Number(el('setting-leaderboard-duration').value || 5));
+      const leaderboardDuration = Math.max(0, Math.floor(Number(el('setting-leaderboard-duration').value || 0)));
+      const maxQuestions = Math.max(1, Number(host.init?.items?.length ?? 1));
+      const questionCount = Math.max(1, Math.min(maxQuestions, Math.floor(Number(el('setting-question-count').value || maxQuestions))));
       const shuffleQuestions = Boolean(el('setting-shuffle').checked);
-      await sdk.settings.set({ timerSec, revealDuration, leaderboardDuration, shuffleQuestions });
+      el('setting-question-count').value = String(questionCount);
+      await sdk.settings.set({ timerSec, revealDuration, leaderboardDuration, questionCount, shuffleQuestions });
       await sdk.settings.setValid(true);
     }
     function stopTimer() {
@@ -438,6 +449,30 @@
           stateChanged = true;
           if (state.revealTimeRemaining <= 0) {
             stateChanged = false;
+            const isLastQuestion = state.currentIndex >= state.items.length - 1;
+            const shouldShowLeaderboard = Number(state.leaderboardDuration ?? 0) > 0;
+            if (isLastQuestion) {
+              stopTimer();
+              await sdk.host.updateState((draft) => {
+                draft.phase = 'finished';
+                draft.revealTimeRemaining = 0;
+              });
+              render(sdk.host.getState());
+            } else if (shouldShowLeaderboard) {
+              await sdk.host.updateState((draft) => {
+                draft.phase = 'leaderboard';
+                draft.revealTimeRemaining = Math.max(0, Math.floor(Number(draft.leaderboardDuration ?? 0)));
+              });
+              render(sdk.host.getState());
+            } else {
+              await nextQuestion();
+            }
+          }
+        } else if (state.phase === 'leaderboard' && state.revealTimeRemaining > 0) {
+          state.revealTimeRemaining--;
+          stateChanged = true;
+          if (state.revealTimeRemaining <= 0) {
+            stateChanged = false;
             await nextQuestion();
           }
         }
@@ -453,10 +488,11 @@
       const state = sdk.host.getState();
       if (!state || state.phase === 'reveal') return;
       const item = state.items[state.currentIndex];
+      const isLastQuestion = state.currentIndex >= state.items.length - 1;
       const correctIndex = getCorrectIndex(item);
       const correctIndices = getCorrectIndices(item);
-      state.phase = 'reveal';
-      state.revealTimeRemaining = Math.max(2, Number(state.revealDuration ?? 5));
+      state.phase = isLastQuestion ? 'finished' : 'reveal';
+      state.revealTimeRemaining = isLastQuestion ? 0 : Math.max(2, Number(state.revealDuration ?? 5));
       state.reveal = { correctIndex, correctIndices, results: {} };
       state.lastScoreDelta = {};
       Object.keys(state.answers).forEach((pid) => {
@@ -512,6 +548,9 @@
       stopTimer();
       const scores = sdk.host.getState()?.scores ?? {};
       await sdk.host.endGame({ scores });
+    }
+    function goBack() {
+      window.history.back();
     }
 
     async function submitAnswer(data) {
@@ -698,16 +737,22 @@
     el('setting-timer').addEventListener('change', async () => { await pushSettings(); });
     el('setting-reveal-duration').addEventListener('change', async () => { await pushSettings(); });
     el('setting-leaderboard-duration').addEventListener('change', async () => { await pushSettings(); });
+    el('setting-question-count').addEventListener('change', async () => { await pushSettings(); });
     el('setting-shuffle').addEventListener('change', async () => { await pushSettings(); });
     el('host-reveal-btn').addEventListener('click', async () => { await revealQuestion(); });
     el('host-end-btn-question').addEventListener('click', async () => { await forceEndGame(); });
     el('host-end-btn-reveal').addEventListener('click', async () => { await forceEndGame(); });
     el('host-close-room-btn').addEventListener('click', async () => { await closeRoom(); });
+    el('host-back-btn').addEventListener('click', () => { goBack(); });
+    el('player-back-btn').addEventListener('click', () => { goBack(); });
 
     sdk.onInit(async (init) => {
       if (init.role === 'host') {
         host.init = init;
         showScreen('host-settings');
+        const totalItems = Math.max(1, Number(init.items?.length ?? 1));
+        el('setting-question-count').setAttribute('max', String(totalItems));
+        el('setting-question-count').value = String(Math.min(10, totalItems));
         await pushSettings();
         await sdk.room.hostReady();
         return;
@@ -737,10 +782,12 @@
       const settings = sdk.settings.get() ?? {};
       const timerSec = Math.max(5, Number(settings.timerSec ?? 20));
       const revealDuration = Math.max(2, Number(settings.revealDuration ?? 5));
-      const leaderboardDuration = Math.max(0, Number(settings.leaderboardDuration ?? 5));
+      const leaderboardDuration = Math.max(0, Math.floor(Number(settings.leaderboardDuration ?? 0)));
+      const requestedQuestionCount = Math.max(1, Math.floor(Number(settings.questionCount ?? 10)));
       const shuffleQuestions = Boolean(settings.shuffleQuestions);
       const sourceItems = host.init?.items ?? [];
-      const activeItems = shuffleQuestions ? shuffle(sourceItems) : sourceItems.slice();
+      const orderedItems = shuffleQuestions ? shuffle(sourceItems) : sourceItems.slice();
+      const activeItems = orderedItems.slice(0, Math.min(requestedQuestionCount, orderedItems.length));
       const scores = {};
       sdk.room.getPlayers().forEach((p) => { scores[p.id] = 0; });
 
