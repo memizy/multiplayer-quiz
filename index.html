@@ -14,7 +14,7 @@
     "maxOqseVersion": "1.99",
     "id": "https://memizy.github.io/multiplayer-quiz/",
     "appName": "Multiplayer Quiz",
-    "description": "Simple multiplayer quiz with mcq-single support.",
+    "description": "Multiplayer quiz with broad OQSE question type support.",
     "author": {
       "name": "Memizy Team",
       "role": "Creator",
@@ -27,18 +27,30 @@
     "questionDensity": "medium",
     "capabilities": {
       "actions": ["render"],
-      "types": ["mcq-single", "true-false"],
+      "types": [
+        "flashcard",
+        "mcq-single",
+        "mcq-multi",
+        "true-false",
+        "match-pairs",
+        "sort-items",
+        "short-answer",
+        "note"
+      ],
       "assets": { "image": null, "audio": null, "video": null, "model": null },
       "features": [
-        "math",
         "markdown",
+        "math",
         "html"
       ]
     },
     "appSpecific": {
       "memizy": {
-        "multiplayer": {
+        "multiplayerSdk": {
           "apiVersion": "0.4",
+          "minimumHostApiVersion": "0.4",
+          "customSyncScreen": false,
+          "hasSettingsScreen": true,
           "players": { "min": 2, "max": 60, "recommended": 20 },
           "supportsLateJoin": true,
           "supportsReconnect": true,
@@ -60,7 +72,7 @@
       "marked": "https://esm.sh/marked@12",
       "katex": "https://esm.sh/katex@0.16",
       "marked-katex-extension": "https://esm.sh/marked-katex-extension@5",
-      "@memizy/multiplayer-sdk": "https://esm.sh/@memizy/multiplayer-sdk@0.4.0"
+      "@memizy/multiplayer-sdk": "https://esm.sh/@memizy/multiplayer-sdk@0.4.1"
     }
   }
   </script>
@@ -110,12 +122,7 @@
 </head>
 <body>
   <div id="app">
-    <section id="host-waiting" class="screen active">
-      <h1>Multiplayer Quiz</h1>
-      <p>Connecting to session...</p>
-    </section>
-
-    <section id="host-settings" class="screen">
+    <section id="host-settings" class="screen active">
       <h1>Host Settings</h1>
       <div class="card col">
         <div class="row">
@@ -170,11 +177,6 @@
       </div>
     </section>
 
-    <section id="player-waiting" class="screen">
-      <h1 id="player-name">Ready</h1>
-      <p>Waiting for host...</p>
-    </section>
-
     <section id="player-question" class="screen">
       <h2 id="player-q-title">Question</h2>
       <div class="card"><h2 id="player-q-text">Question text</h2></div>
@@ -218,8 +220,8 @@
     let gameHasStarted = false;
 
     const SCREEN_IDS = [
-      'host-waiting', 'host-settings', 'host-question', 'host-reveal', 'host-finished',
-      'player-waiting', 'player-question', 'player-answered', 'player-reveal', 'player-finished', 'error-screen',
+      'host-settings', 'host-question', 'host-reveal', 'host-finished',
+      'player-question', 'player-answered', 'player-reveal', 'player-finished', 'error-screen',
     ];
 
     function el(id) { return document.getElementById(id); }
@@ -257,14 +259,39 @@
       if (item.type === 'mcq-multi') return 'mcq-multi';
       if (item.type === 'short-answer') return 'short-answer';
       if (item.type === 'match-pairs') return 'match-pairs';
+      if (item.type === 'sort-items') return 'sort-items';
+      if (item.type === 'flashcard') return 'flashcard';
+      if (item.type === 'note') return 'note';
       return 'mcq-single';
     }
     function getChoices(item) {
       const type = getItemType(item);
       if (type === 'true-false') return ['True', 'False'];
+      if (type === 'sort-items' && Array.isArray(item?.items)) {
+        return item.items.map((entry) => typeof entry === 'string' ? entry : (entry?.text ?? entry?.label ?? String(entry)));
+      }
       if (Array.isArray(item?.options)) return item.options.map((o) => typeof o === 'string' ? o : (o?.text ?? o?.label ?? String(o)));
       if (Array.isArray(item?.choices)) return item.choices.map((c) => c?.text ?? c?.label ?? String(c));
       return [];
+    }
+    function getSortExpectedOrder(item) {
+      const choices = getChoices(item);
+      if (!choices.length) return [];
+      if (Array.isArray(item?.correctOrder) && item.correctOrder.length === choices.length) {
+        return item.correctOrder.map((idx) => Number(idx)).filter((idx) => Number.isInteger(idx));
+      }
+      if (Array.isArray(item?.items)) {
+        const withOrder = item.items
+          .map((entry, idx) => ({
+            idx,
+            order: Number(entry?.order ?? entry?.correctPosition ?? idx),
+          }))
+          .filter((entry) => Number.isFinite(entry.order))
+          .sort((a, b) => a.order - b.order)
+          .map((entry) => entry.idx);
+        if (withOrder.length === choices.length) return withOrder;
+      }
+      return choices.map((_, idx) => idx);
     }
     function getCorrectIndex(item) {
       if (!item) return 0;
@@ -328,6 +355,16 @@
         if (expectedPairs.length !== submittedPairs.length) return false;
         return expectedPairs.every((pair, idx) => pair.left === submittedPairs[idx].left && pair.right === submittedPairs[idx].right);
       }
+      if (type === 'sort-items') {
+        const expectedOrder = getSortExpectedOrder(item);
+        const submitted = Array.isArray(answerData?.orderedIndices)
+          ? answerData.orderedIndices.map((idx) => Number(idx))
+          : [];
+        return arraysEqual(expectedOrder, submitted);
+      }
+      if (type === 'flashcard' || type === 'note') {
+        return answerData?.ack === true;
+      }
       return false;
     }
     function getRevealMarkup(item, reveal) {
@@ -356,6 +393,15 @@
         return `<div class="card">${pairs.map((pair) =>
           `<div class="pair-row"><div class="pair-left">${esc(pair.left)}</div><div>${esc(pair.right)}</div></div>`
         ).join('')}</div>`;
+      }
+      if (type === 'sort-items') {
+        const choices = getChoices(item);
+        const expected = getSortExpectedOrder(item);
+        const ordered = expected.map((idx) => choices[idx]).filter(Boolean);
+        return `<div class="card"><p><strong>Correct order:</strong></p><ol>${ordered.map((choice) => `<li>${esc(choice)}</li>`).join('')}</ol></div>`;
+      }
+      if (type === 'flashcard' || type === 'note') {
+        return `<div class="card"><p><strong>Acknowledged.</strong> Continue to next item.</p></div>`;
       }
       return '';
     }
@@ -527,6 +573,10 @@
             el('host-q-choices').innerHTML = '<div class="card"><p>Players submit a free text answer.</p></div>';
           } else if (type === 'match-pairs') {
             el('host-q-choices').innerHTML = '<div class="card"><p>Players submit left/right matches.</p></div>';
+          } else if (type === 'sort-items') {
+            el('host-q-choices').innerHTML = '<div class="card"><p>Players submit the correct ordering.</p></div>';
+          } else if (type === 'flashcard' || type === 'note') {
+            el('host-q-choices').innerHTML = '<div class="card"><p>Players acknowledge this informational card.</p></div>';
           } else {
             el('host-q-choices').innerHTML = '';
           }
@@ -613,6 +663,35 @@
             });
             await submitAnswer({ pairs: selectedPairs });
           });
+        } else if (type === 'sort-items') {
+          const choices = getChoices(item);
+          el('player-q-choices').innerHTML = `
+            <div class="col">
+              ${choices.map((choice, idx) =>
+                `<div class="pair-row"><div class="pair-left">${esc(choice)}</div><select data-item="${idx}">${choices.map((_, orderIdx) =>
+                  `<option value="${orderIdx}">${orderIdx + 1}</option>`
+                ).join('')}</select></div>`
+              ).join('')}
+              <div class="submit-wrap"><button id="player-submit-sort" class="btn">Submit order</button></div>
+            </div>
+          `;
+          el('player-submit-sort').addEventListener('click', async () => {
+            const orderedIndices = choices.map((_, idx) => {
+              const select = el('player-q-choices').querySelector(`select[data-item="${idx}"]`);
+              return Number(select?.value ?? idx);
+            });
+            await submitAnswer({ orderedIndices });
+          });
+        } else if (type === 'flashcard' || type === 'note') {
+          el('player-q-choices').innerHTML = `
+            <div class="card">
+              <p>Read the content and continue when ready.</p>
+              <div class="submit-wrap"><button id="player-submit-ack" class="btn">I'm ready</button></div>
+            </div>
+          `;
+          el('player-submit-ack').addEventListener('click', async () => {
+            await submitAnswer({ ack: true });
+          });
         } else {
           el('player-q-choices').innerHTML = '';
         }
@@ -656,8 +735,6 @@
         return;
       }
       player.myId = init.self.id;
-      el('player-name').textContent = `Ready, ${init.self.name}`;
-      showScreen('player-waiting');
       await sdk.room.clientReady();
     });
 
@@ -732,7 +809,9 @@
           : type === 'mcq-multi' ? Array.isArray(data.selectedIndices)
             : type === 'short-answer' ? typeof data.text === 'string'
               : type === 'match-pairs' ? Array.isArray(data.pairs)
-                : false;
+                : type === 'sort-items' ? Array.isArray(data.orderedIndices)
+                  : (type === 'flashcard' || type === 'note') ? data.ack === true
+                    : false;
       if (!isValidPayload) return;
       await sdk.host.updateState((draft) => { draft.answers[playerId] = data; });
       render(sdk.host.getState());
