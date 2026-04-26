@@ -108,9 +108,13 @@
     input[type="number"], input[type="text"], select { width: 180px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; }
     .full-input { width: 100%; }
     .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .check-item { display: flex; align-items: center; gap: 8px; background: #e2e8f0; border-radius: 8px; padding: 10px; }
-    .pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center; margin-bottom: 8px; }
-    .pair-left { background: #e2e8f0; border-radius: 8px; padding: 10px; font-weight: 600; }
+    .check-item { display: flex; align-items: center; gap: 10px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease, background-color 0.15s ease; }
+    .check-item:hover { border-color: #2563eb; background: #eff6ff; transform: translateY(-1px); }
+    .check-item input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+    .pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: stretch; margin-bottom: 8px; }
+    .pair-left { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; align-items: center; min-height: 48px; }
+    .pair-select { width: 100%; min-height: 48px; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .sort-position { font-weight: 800; color: #1e3a8a; min-width: 28px; text-align: center; display: inline-flex; align-items: center; justify-content: center; }
     .submit-wrap { display: flex; justify-content: center; margin-top: 10px; }
     .prompt-html :first-child { margin-top: 0; }
     .prompt-html :last-child { margin-bottom: 0; }
@@ -175,7 +179,6 @@
       <h1>Game Finished</h1>
       <div id="host-final-board" class="leaderboard"></div>
       <div class="row center">
-        <button id="host-back-btn" class="btn btn-secondary">Back...</button>
         <button id="host-close-room-btn" class="btn btn-secondary">Close Room</button>
       </div>
     </section>
@@ -201,9 +204,6 @@
     <section id="player-finished" class="screen">
       <h1>Game Finished</h1>
       <div id="player-final-board" class="leaderboard"></div>
-      <div class="row center">
-        <button id="player-back-btn" class="btn btn-secondary">Back...</button>
-      </div>
     </section>
 
     <section id="error-screen" class="screen">
@@ -224,6 +224,8 @@
     const host = { init: null, timerIntervalId: null };
     const player = { myId: '' };
     let gameHasStarted = false;
+    let renderedPhase = null;
+    let renderedIndex = null;
 
     const SCREEN_IDS = [
       'host-settings', 'host-question', 'host-reveal', 'host-finished',
@@ -252,7 +254,7 @@
       return out;
     }
     function getPromptHtml(item) {
-      const rawText = item?.question || item?.text || '';
+      const rawText = item?.question || '';
       return sdk.text.renderHtml(rawText, {
         markdownParser: (text) => marked.parse(text),
         sanitizer: (html) => DOMPurify.sanitize(html),
@@ -262,6 +264,7 @@
     function getItemType(item) {
       if (!item) return 'mcq-single';
       if (item.type === 'true-false') return 'true-false';
+      if (item.type === 'mcq-single') return 'mcq-single';
       if (item.type === 'mcq-multi') return 'mcq-multi';
       if (item.type === 'short-answer') return 'short-answer';
       if (item.type === 'match-pairs') return 'match-pairs';
@@ -271,66 +274,47 @@
     function getChoices(item) {
       const type = getItemType(item);
       if (type === 'true-false') return ['True', 'False'];
-      if (type === 'sort-items' && Array.isArray(item?.items)) {
-        return item.items.map((entry) => typeof entry === 'string' ? entry : (entry?.text ?? entry?.label ?? String(entry)));
+      if ((type === 'mcq-single' || type === 'mcq-multi') && Array.isArray(item?.options)) {
+        return item.options.map((o) => String(o ?? ''));
       }
-      if (Array.isArray(item?.options)) return item.options.map((o) => typeof o === 'string' ? o : (o?.text ?? o?.label ?? String(o)));
-      if (Array.isArray(item?.choices)) return item.choices.map((c) => c?.text ?? c?.label ?? String(c));
+      if (type === 'sort-items' && Array.isArray(item?.items)) {
+        return item.items.map((entry) => String(entry ?? ''));
+      }
       return [];
     }
     function getSortExpectedOrder(item) {
-      const choices = getChoices(item);
-      if (!choices.length) return [];
-      if (Array.isArray(item?.correctOrder) && item.correctOrder.length === choices.length) {
-        return item.correctOrder.map((idx) => Number(idx)).filter((idx) => Number.isInteger(idx));
-      }
-      if (Array.isArray(item?.items)) {
-        const withOrder = item.items
-          .map((entry, idx) => ({
-            idx,
-            order: Number(entry?.order ?? entry?.correctPosition ?? idx),
-          }))
-          .filter((entry) => Number.isFinite(entry.order))
-          .sort((a, b) => a.order - b.order)
-          .map((entry) => entry.idx);
-        if (withOrder.length === choices.length) return withOrder;
-      }
-      return choices.map((_, idx) => idx);
+      if (!Array.isArray(item?.items)) return [];
+      return item.items.map((entry) => String(entry ?? ''));
     }
     function getCorrectIndex(item) {
       if (!item) return 0;
-      const choices = item.options ?? item.choices;
-      if (getItemType(item) === 'true-false') return item.isTrue === true || item.answer === true ? 0 : 1;
+      if (getItemType(item) === 'true-false') return item.answer === true ? 0 : 1;
       if (typeof item.correctIndex === 'number') return item.correctIndex;
-      if (Array.isArray(choices)) {
-        const idx = choices.findIndex((c) => c?.isCorrect === true);
-        if (idx >= 0) return idx;
-      }
       return 0;
     }
     function getCorrectIndices(item) {
-      const choices = item?.options ?? item?.choices;
-      if (!Array.isArray(choices)) return [];
-      return choices.map((choice, idx) => (choice?.isCorrect === true ? idx : -1)).filter((idx) => idx >= 0);
+      if (!Array.isArray(item?.correctIndices)) return [];
+      return item.correctIndices
+        .map((idx) => Number(idx))
+        .filter((idx) => Number.isInteger(idx));
     }
     function normalizeText(value) {
       return String(value ?? '').trim().toLowerCase();
     }
     function getMatchPairs(item) {
-      if (!Array.isArray(item?.pairs)) return [];
-      return item.pairs.map((pair) => {
-        if (Array.isArray(pair)) {
-          return { left: String(pair[0] ?? ''), right: String(pair[1] ?? '') };
-        }
-        return { left: String(pair?.left ?? pair?.a ?? ''), right: String(pair?.right ?? pair?.b ?? '') };
-      });
+      if (!Array.isArray(item?.prompts) || !Array.isArray(item?.matches)) return [];
+      const len = Math.min(item.prompts.length, item.matches.length);
+      return Array.from({ length: len }, (_, idx) => ({
+        prompt: String(item.prompts[idx] ?? ''),
+        match: String(item.matches[idx] ?? ''),
+      }));
     }
     function normalizeSubmittedPairs(pairs) {
       if (!Array.isArray(pairs)) return [];
-      return pairs.map((pair) => {
-        if (Array.isArray(pair)) return { left: String(pair[0] ?? ''), right: String(pair[1] ?? '') };
-        return { left: String(pair?.left ?? ''), right: String(pair?.right ?? '') };
-      });
+      return pairs.map((pair) => ({
+        prompt: String(pair?.prompt ?? ''),
+        match: String(pair?.match ?? ''),
+      }));
     }
     function arraysEqual(a, b) {
       if (a.length !== b.length) return false;
@@ -349,20 +333,24 @@
         return arraysEqual(expected, submitted);
       }
       if (type === 'short-answer') {
-        const submitted = normalizeText(answerData?.text);
-        const answers = Array.isArray(item?.answers) ? item.answers.map((a) => normalizeText(a)) : [];
+        const submittedRaw = String(answerData?.text ?? '').trim();
+        const isCaseSensitive = item?.caseSensitive === true;
+        const submitted = isCaseSensitive ? submittedRaw : normalizeText(submittedRaw);
+        const answers = Array.isArray(item?.answers)
+          ? item.answers.map((a) => (isCaseSensitive ? String(a ?? '').trim() : normalizeText(a)))
+          : [];
         return submitted.length > 0 && answers.includes(submitted);
       }
       if (type === 'match-pairs') {
         const expectedPairs = getMatchPairs(item);
         const submittedPairs = normalizeSubmittedPairs(answerData?.pairs);
         if (expectedPairs.length !== submittedPairs.length) return false;
-        return expectedPairs.every((pair, idx) => pair.left === submittedPairs[idx].left && pair.right === submittedPairs[idx].right);
+        return expectedPairs.every((pair, idx) => pair.prompt === submittedPairs[idx].prompt && pair.match === submittedPairs[idx].match);
       }
       if (type === 'sort-items') {
         const expectedOrder = getSortExpectedOrder(item);
-        const submitted = Array.isArray(answerData?.orderedIndices)
-          ? answerData.orderedIndices.map((idx) => Number(idx))
+        const submitted = Array.isArray(answerData?.orderedItems)
+          ? answerData.orderedItems.map((entry) => String(entry ?? ''))
           : [];
         return arraysEqual(expectedOrder, submitted);
       }
@@ -392,13 +380,11 @@
       if (type === 'match-pairs') {
         const pairs = getMatchPairs(item);
         return `<div class="card">${pairs.map((pair) =>
-          `<div class="pair-row"><div class="pair-left">${esc(pair.left)}</div><div>${esc(pair.right)}</div></div>`
+          `<div class="pair-row"><div class="pair-left">${esc(pair.prompt)}</div><div class="pair-left">${esc(pair.match)}</div></div>`
         ).join('')}</div>`;
       }
       if (type === 'sort-items') {
-        const choices = getChoices(item);
-        const expected = getSortExpectedOrder(item);
-        const ordered = expected.map((idx) => choices[idx]).filter(Boolean);
+        const ordered = getSortExpectedOrder(item);
         return `<div class="card"><p><strong>Correct order:</strong></p><ol>${ordered.map((choice) => `<li>${esc(choice)}</li>`).join('')}</ol></div>`;
       }
       return '';
@@ -549,10 +535,6 @@
       const scores = sdk.host.getState()?.scores ?? {};
       await sdk.host.endGame({ scores });
     }
-    function goBack() {
-      window.history.back();
-    }
-
     async function submitAnswer(data) {
       const state = sdk.player.state;
       if (!state || state.phase !== 'question') return;
@@ -572,6 +554,19 @@
     function render(state) {
       if (!state) return;
       const role = sdk.room.role;
+      const sameQuestionContext = state.phase === renderedPhase && state.currentIndex === renderedIndex;
+      const playerJustAnswered = state.phase === 'question' && role === 'player' && Boolean(state.answers?.[player.myId]);
+      if (sameQuestionContext && state.phase !== 'finished' && !playerJustAnswered) {
+        el('player-time').textContent = String(state.timeRemaining ?? 0);
+        el('host-time').textContent = String(state.timeRemaining ?? 0);
+        el('host-reveal-time').textContent = String(state.revealTimeRemaining ?? 0);
+        el('player-reveal-time').textContent = String(state.revealTimeRemaining ?? 0);
+        el('host-answered').textContent = String(Object.keys(state.answers ?? {}).length);
+        el('host-total').textContent = String(sdk.room.getPlayers().length);
+        return;
+      }
+      renderedPhase = state.phase;
+      renderedIndex = state.currentIndex;
 
       if (state.phase === 'finished') {
         if (role === 'host') {
@@ -646,7 +641,7 @@
           el('player-q-choices').innerHTML = `
             <div class="check-grid">
               ${choices.map((choice, idx) =>
-                `<label class="check-item"><input type="checkbox" data-idx="${idx}" /> ${esc(choice)}</label>`
+                `<label class="check-item"><input type="checkbox" data-idx="${idx}" /><span>${esc(choice)}</span></label>`
               ).join('')}
             </div>
             <div class="submit-wrap"><button id="player-submit-multi" class="btn">Submit</button></div>
@@ -670,44 +665,46 @@
           });
         } else if (type === 'match-pairs') {
           const pairs = getMatchPairs(item);
-          const leftItems = pairs.map((pair) => pair.left);
-          const rightItems = pairs.map((pair) => pair.right);
+          const promptItems = pairs.map((pair) => pair.prompt);
+          const matchItems = pairs.map((pair) => pair.match);
           el('player-q-choices').innerHTML = `
             <div class="col">
-              ${leftItems.map((left, idx) =>
-                `<div class="pair-row"><div class="pair-left">${esc(left)}</div><select data-left="${idx}">${rightItems.map((right, rightIdx) =>
-                  `<option value="${rightIdx}">${esc(right)}</option>`
+              ${promptItems.map((prompt, idx) =>
+                `<div class="pair-row"><div class="pair-left">${esc(prompt)}</div><select class="pair-select" data-prompt="${idx}">${matchItems.map((match, matchIdx) =>
+                  `<option value="${matchIdx}">${esc(match)}</option>`
                 ).join('')}</select></div>`
               ).join('')}
               <div class="submit-wrap"><button id="player-submit-pairs" class="btn">Submit</button></div>
             </div>
           `;
           el('player-submit-pairs').addEventListener('click', async () => {
-            const selectedPairs = leftItems.map((left, idx) => {
-              const select = el('player-q-choices').querySelector(`select[data-left="${idx}"]`);
-              const rightIdx = Number(select?.value ?? 0);
-              return { left, right: rightItems[rightIdx] ?? '' };
+            const selectedPairs = promptItems.map((prompt, idx) => {
+              const select = el('player-q-choices').querySelector(`select[data-prompt="${idx}"]`);
+              const matchIdx = Number(select?.value ?? 0);
+              return { prompt, match: matchItems[matchIdx] ?? '' };
             });
             await submitAnswer({ pairs: selectedPairs });
           });
         } else if (type === 'sort-items') {
-          const choices = getChoices(item);
+          const expectedOrder = getSortExpectedOrder(item);
+          const shuffledChoices = shuffle(expectedOrder);
           el('player-q-choices').innerHTML = `
             <div class="col">
-              ${choices.map((choice, idx) =>
-                `<div class="pair-row"><div class="pair-left">${esc(choice)}</div><select data-item="${idx}">${choices.map((_, orderIdx) =>
-                  `<option value="${orderIdx}">${orderIdx + 1}</option>`
+              ${expectedOrder.map((_, orderIdx) =>
+                `<div class="pair-row"><div class="pair-left"><span class="sort-position">${orderIdx + 1}.</span></div><select class="pair-select" data-order="${orderIdx}">${shuffledChoices.map((choice, choiceIdx) =>
+                  `<option value="${choiceIdx}">${esc(choice)}</option>`
                 ).join('')}</select></div>`
               ).join('')}
               <div class="submit-wrap"><button id="player-submit-sort" class="btn">Submit order</button></div>
             </div>
           `;
           el('player-submit-sort').addEventListener('click', async () => {
-            const orderedIndices = choices.map((_, idx) => {
-              const select = el('player-q-choices').querySelector(`select[data-item="${idx}"]`);
-              return Number(select?.value ?? idx);
+            const orderedItems = expectedOrder.map((_, orderIdx) => {
+              const select = el('player-q-choices').querySelector(`select[data-order="${orderIdx}"]`);
+              const choiceIdx = Number(select?.value ?? 0);
+              return shuffledChoices[choiceIdx] ?? '';
             });
-            await submitAnswer({ orderedIndices });
+            await submitAnswer({ orderedItems });
           });
         } else {
           el('player-q-choices').innerHTML = '';
@@ -743,8 +740,6 @@
     el('host-end-btn-question').addEventListener('click', async () => { await forceEndGame(); });
     el('host-end-btn-reveal').addEventListener('click', async () => { await forceEndGame(); });
     el('host-close-room-btn').addEventListener('click', async () => { await closeRoom(); });
-    el('host-back-btn').addEventListener('click', () => { goBack(); });
-    el('player-back-btn').addEventListener('click', () => { goBack(); });
 
     sdk.onInit(async (init) => {
       if (init.role === 'host') {
@@ -829,12 +824,20 @@
       const item = state.items[state.currentIndex];
       const type = getItemType(item);
       const data = action.data ?? {};
+      const choices = getChoices(item);
       const isValidPayload =
-        (type === 'mcq-single' || type === 'true-false') ? Number.isInteger(Number(data.optionIndex))
-          : type === 'mcq-multi' ? Array.isArray(data.selectedIndices)
-            : type === 'short-answer' ? typeof data.text === 'string'
-              : type === 'match-pairs' ? Array.isArray(data.pairs)
-                : type === 'sort-items' ? Array.isArray(data.orderedIndices)
+        (type === 'mcq-single' || type === 'true-false')
+          ? Number.isInteger(Number(data.optionIndex)) && Number(data.optionIndex) >= 0 && Number(data.optionIndex) < choices.length
+          : type === 'mcq-multi'
+            ? Array.isArray(data.selectedIndices) && data.selectedIndices.every((idx) => Number.isInteger(Number(idx)) && Number(idx) >= 0 && Number(idx) < choices.length)
+            : type === 'short-answer'
+              ? typeof data.text === 'string'
+              : type === 'match-pairs'
+                ? Array.isArray(data.pairs) && Array.isArray(item?.prompts) && data.pairs.length === item.prompts.length
+                  && data.pairs.every((pair) => typeof pair?.prompt === 'string' && typeof pair?.match === 'string')
+                : type === 'sort-items'
+                  ? Array.isArray(data.orderedItems) && data.orderedItems.length === getSortExpectedOrder(item).length
+                    && data.orderedItems.every((entry) => typeof entry === 'string')
                   : false;
       if (!isValidPayload) return;
       await sdk.host.updateState((draft) => { draft.answers[playerId] = data; });
