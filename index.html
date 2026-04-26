@@ -213,9 +213,8 @@
     marked.use(markedKatex({ throwOnError: false }));
 
     const sdk = new MemizyMultiplayerSDK({ id: 'multiplayer-quiz', version: '1.0.0' });
-    const host = { init: null, ready: new Set(), timerIntervalId: null };
+    const host = { init: null, timerIntervalId: null };
     const player = { myId: '' };
-    let syncTimeoutId = null;
     let gameHasStarted = false;
 
     const SCREEN_IDS = [
@@ -666,11 +665,6 @@
       if (gameHasStarted) return;
       gameHasStarted = true;
 
-      if (syncTimeoutId) {
-        clearTimeout(syncTimeoutId);
-        syncTimeoutId = null;
-      }
-
       const currentState = sdk.host.getState();
       if (currentState) {
         await sdk.host.setState(currentState);
@@ -711,28 +705,7 @@
       });
       render(sdk.host.getState());
 
-      host.ready = new Set();
-      gameHasStarted = false;
-      if (syncTimeoutId) {
-        clearTimeout(syncTimeoutId);
-        syncTimeoutId = null;
-      }
-
-      await sdk.room.startGame();
-
-      syncTimeoutId = setTimeout(async () => {
-        await beginPlaying();
-      }, 10000);
-    });
-
-    sdk.onPlayerReady(async (playerId) => {
-      if (sdk.room.role !== 'host') return;
-      host.ready.add(playerId);
-
-      const totalPlayers = sdk.room.getPlayers().length;
-      if (host.ready.size >= totalPlayers) {
-        await beginPlaying();
-      }
+      await beginPlaying();
     });
 
     sdk.onPlayerJoin(async (playerInfo, meta) => {
@@ -776,10 +749,6 @@
     });
 
     sdk.onGameEnd((result) => {
-      if (syncTimeoutId) {
-        clearTimeout(syncTimeoutId);
-        syncTimeoutId = null;
-      }
       stopTimer();
       const scores = result?.scores ?? {};
       const baseState = sdk.room.role === 'host' ? (sdk.host.getState() ?? {}) : (sdk.player.state ?? {});
