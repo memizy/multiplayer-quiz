@@ -171,7 +171,7 @@
         <button id="host-end-btn-reveal" class="btn btn-danger btn-small">End Game</button>
       </div>
       <div class="card"><h2 id="host-reveal-text">Question text</h2></div>
-      <p>Next question in: <strong id="host-reveal-time">0</strong>s</p>
+      <p><span id="host-reveal-label">Next question in</span>: <strong id="host-reveal-time">0</strong>s</p>
       <div id="host-reveal-choices" class="answer-grid"></div>
     </section>
 
@@ -198,7 +198,7 @@
     <section id="player-reveal" class="screen">
       <h1 id="player-result">Result</h1>
       <p id="player-score-msg"></p>
-      <p>Next question in: <strong id="player-reveal-time">0</strong>s</p>
+      <p><span id="player-reveal-label">Next question in</span>: <strong id="player-reveal-time">0</strong>s</p>
     </section>
 
     <section id="player-finished" class="screen">
@@ -607,6 +607,9 @@
         if (state.phase === 'reveal' || state.phase === 'leaderboard') {
           showScreen('host-reveal');
           el('host-reveal-time').textContent = String(state.revealTimeRemaining ?? 0);
+          el('host-reveal-label').textContent = state.phase === 'reveal' && Number(state.leaderboardDuration ?? 0) > 0
+            ? 'Displaying leaderboard in'
+            : 'Next question in';
           if (state.phase === 'leaderboard') {
             el('host-reveal-title').textContent = 'Leaderboard';
             el('host-reveal-text').innerHTML = '<div class="prompt-html">Round standings</div>';
@@ -715,6 +718,9 @@
       if (state.phase === 'reveal' || state.phase === 'leaderboard') {
         showScreen('player-reveal');
         el('player-reveal-time').textContent = String(state.revealTimeRemaining ?? 0);
+        el('player-reveal-label').textContent = state.phase === 'reveal' && Number(state.leaderboardDuration ?? 0) > 0
+          ? 'Displaying leaderboard in'
+          : 'Next question in';
         if (state.phase === 'leaderboard') {
           el('player-result').textContent = 'Leaderboard';
           const rows = buildRows(state.scores ?? {});
