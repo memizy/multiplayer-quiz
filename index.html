@@ -91,6 +91,7 @@
     p { color: #475569; }
     .card .prompt-html, .card .prompt-html p { color: #0f172a; }
     .answer-btn .prompt-html, .answer-btn .prompt-html p, .answer-btn .prompt-html span { color: #fff; }
+    .answer-btn.reveal-correct .prompt-html, .answer-btn.reveal-correct .prompt-html p, .answer-btn.reveal-correct .prompt-html span { color: #0f172a; }
     .muted { font-size: 14px; color: #64748b; }
     .btn { border: 0; padding: 10px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; background: #2563eb; color: #fff; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -103,7 +104,7 @@
     .answer-btn:nth-child(2) { background: #3b82f6; }
     .answer-btn:nth-child(3) { background: #22c55e; }
     .answer-btn:nth-child(4) { background: #f59e0b; }
-    .answer-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .answer-btn:disabled { opacity: 1; cursor: not-allowed; }
     .leaderboard { display: flex; flex-direction: column; gap: 8px; }
     .lb-row { background: #fff; border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
     label { font-size: 14px; color: #475569; }
@@ -391,14 +392,14 @@
         const choices = getChoices(item);
         const correctIndex = reveal?.correctIndex ?? 0;
         return choices.map((choice, idx) =>
-          `<button class="answer-btn" disabled style="${idx === correctIndex ? 'border:4px solid #16a34a; background-color:#dcfce7; color:#166534;' : 'opacity:0.3;'}"><span class="prompt-html">${idx === correctIndex ? '✅ ' : ''}${renderRichSnippet(choice)}</span></button>`
+          `<button class="answer-btn${idx === correctIndex ? ' reveal-correct' : ''}" disabled style="${idx === correctIndex ? 'border:4px solid #16a34a; background-color:#dcfce7; color:#166534;' : 'opacity:0.3;'}"><span class="prompt-html">${idx === correctIndex ? '✅ ' : ''}${renderRichSnippet(choice)}</span></button>`
         ).join('');
       }
       if (type === 'mcq-multi') {
         const choices = getChoices(item);
         const correctSet = new Set(reveal?.correctIndices ?? []);
         return choices.map((choice, idx) =>
-          `<button class="answer-btn" disabled style="${correctSet.has(idx) ? 'border:4px solid #16a34a; background-color:#dcfce7; color:#166534;' : 'opacity:0.3;'}"><span class="prompt-html">${correctSet.has(idx) ? '✅ ' : ''}${renderRichSnippet(choice)}</span></button>`
+          `<button class="answer-btn${correctSet.has(idx) ? ' reveal-correct' : ''}" disabled style="${correctSet.has(idx) ? 'border:4px solid #16a34a; background-color:#dcfce7; color:#166534;' : 'opacity:0.3;'}"><span class="prompt-html">${correctSet.has(idx) ? '✅ ' : ''}${renderRichSnippet(choice)}</span></button>`
         ).join('');
       }
       if (type === 'short-answer') {
