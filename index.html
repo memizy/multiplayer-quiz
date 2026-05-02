@@ -35,7 +35,7 @@
         "sort-items",
         "short-answer"
       ],
-      "assets": { "image": null, "audio": null, "video": null, "model": null },
+      "assets": { "image": ["*"], "audio": ["*"], "video": ["*"], "model": null },
       "features": [
         "markdown",
         "math",
@@ -118,7 +118,9 @@
     .submit-wrap { display: flex; justify-content: center; margin-top: 10px; }
     .prompt-html :first-child { margin-top: 0; }
     .prompt-html :last-child { margin-bottom: 0; }
-    .prompt-html img { max-width: 100%; height: auto; border-radius: 8px; }
+    .prompt-html img { max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 0.35rem auto; }
+    .answer-btn .prompt-html, .check-item .prompt-html { display: block; text-align: left; }
+    .check-item .prompt-html img { margin: 0.25rem 0; }
     .prompt-html .katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; }
   </style>
 </head>
@@ -254,13 +256,37 @@
       }
       return out;
     }
+    /** Marked treats `__` inside OQSE placeholders as emphasis; keep tokens intact for detokenize. */
+    function parseMarkdownPreservingOqseTokens(md) {
+      const TOKEN_RE = /\[\[__OQSE_TOKEN_[a-z0-9]+__\]\]/gi;
+      const vault = [];
+      const safe = md.replace(TOKEN_RE, (full) => {
+        vault.push(full);
+        return `\n<!--OQSE-TOKEN-${vault.length - 1}-->\n`;
+      });
+      let html = marked.parse(safe);
+      for (let i = 0; i < vault.length; i++) {
+        html = html.split(`<!--OQSE-TOKEN-${i}-->`).join(vault[i]);
+      }
+      return html;
+    }
+    const RICH_TEXT_OPTS = {
+      markdownParser: (text) => parseMarkdownPreservingOqseTokens(text),
+      sanitizer: (html) => DOMPurify.sanitize(html),
+      requirements: { features: ['markdown', 'math', 'html'] },
+    };
+    function renderRichSnippet(rawText) {
+      return sdk.text.renderHtml(String(rawText ?? ''), RICH_TEXT_OPTS);
+    }
+    function plainLabelFromRich(rawText) {
+      const html = renderRichSnippet(rawText);
+      const d = document.createElement('div');
+      d.innerHTML = html;
+      return d.textContent || '';
+    }
     function getPromptHtml(item) {
       const rawText = item?.question || '';
-      return sdk.text.renderHtml(rawText, {
-        markdownParser: (text) => marked.parse(text),
-        sanitizer: (html) => DOMPurify.sanitize(html),
-        requirements: { features: ['markdown', 'latex'] },
-      });
+      return sdk.text.renderHtml(rawText, RICH_TEXT_OPTS);
     }
     function getItemType(item) {
       if (!item) return 'mcq-single';
@@ -363,30 +389,32 @@
         const choices = getChoices(item);
         const correctIndex = reveal?.correctIndex ?? 0;
         return choices.map((choice, idx) =>
-          `<button class="answer-btn" disabled style="${idx === correctIndex ? 'border:4px solid #16a34a; background-color:#dcfce7; color:#166534;' : 'opacity:0.3;'}">${idx === correctIndex ? '✅ ' : ''}${esc(choice)}</button>`
+          `<button class="answer-btn" disabled style="${idx === correctIndex ? 'border:4px solid #16a34a; background-color:#dcfce7; color:#166534;' : 'opacity:0.3;'}"><span class="prompt-html">${idx === correctIndex ? '✅ ' : ''}${renderRichSnippet(choice)}</span></button>`
         ).join('');
       }
       if (type === 'mcq-multi') {
         const choices = getChoices(item);
         const correctSet = new Set(reveal?.correctIndices ?? []);
         return choices.map((choice, idx) =>
-          `<button class="answer-btn" disabled style="${correctSet.has(idx) ? 'border:4px solid #16a34a; background-color:#dcfce7; color:#166534;' : 'opacity:0.3;'}">${correctSet.has(idx) ? '✅ ' : ''}${esc(choice)}</button>`
+          `<button class="answer-btn" disabled style="${correctSet.has(idx) ? 'border:4px solid #16a34a; background-color:#dcfce7; color:#166534;' : 'opacity:0.3;'}"><span class="prompt-html">${correctSet.has(idx) ? '✅ ' : ''}${renderRichSnippet(choice)}</span></button>`
         ).join('');
       }
       if (type === 'short-answer') {
         const answers = Array.isArray(item?.answers) ? item.answers : [];
-        const answerLabel = answers.length > 0 ? answers.map((answer) => esc(answer)).join(', ') : 'No answer configured';
+        const answerLabel = answers.length > 0
+          ? answers.map((answer) => `<span class="prompt-html">${renderRichSnippet(String(answer ?? ''))}</span>`).join(', ')
+          : 'No answer configured';
         return `<div class="card"><p><strong>Accepted answers:</strong> ${answerLabel}</p></div>`;
       }
       if (type === 'match-pairs') {
         const pairs = getMatchPairs(item);
         return `<div class="card">${pairs.map((pair) =>
-          `<div class="pair-row"><div class="pair-left">${esc(pair.prompt)}</div><div class="pair-left">${esc(pair.match)}</div></div>`
+          `<div class="pair-row"><div class="pair-left prompt-html">${renderRichSnippet(pair.prompt)}</div><div class="pair-left prompt-html">${renderRichSnippet(pair.match)}</div></div>`
         ).join('')}</div>`;
       }
       if (type === 'sort-items') {
         const ordered = getSortExpectedOrder(item);
-        return `<div class="card"><p><strong>Correct order:</strong></p><ol>${ordered.map((choice) => `<li>${esc(choice)}</li>`).join('')}</ol></div>`;
+        return `<div class="card"><p><strong>Correct order:</strong></p><ol>${ordered.map((choice) => `<li class="prompt-html">${renderRichSnippet(choice)}</li>`).join('')}</ol></div>`;
       }
       return '';
     }
@@ -594,7 +622,7 @@
           el('host-q-text').innerHTML = `<div class="prompt-html">${getPromptHtml(item)}</div>`;
           const type = getItemType(item);
           if (type === 'mcq-single' || type === 'true-false' || type === 'mcq-multi') {
-            el('host-q-choices').innerHTML = getChoices(item).map((choice) => `<button class="answer-btn" disabled>${esc(choice)}</button>`).join('');
+            el('host-q-choices').innerHTML = getChoices(item).map((choice) => `<button class="answer-btn" disabled><span class="prompt-html">${renderRichSnippet(choice)}</span></button>`).join('');
           } else if (type === 'short-answer') {
             el('host-q-choices').innerHTML = '<div class="card"><p>Players submit a free text answer.</p></div>';
           } else if (type === 'match-pairs') {
@@ -639,14 +667,14 @@
         const type = getItemType(item);
         if (type === 'mcq-single' || type === 'true-false') {
           el('player-q-choices').innerHTML = getChoices(item).map((choice, idx) =>
-            `<button class="answer-btn" onclick="window.sendAnswer(${idx})">${esc(choice)}</button>`
+            `<button class="answer-btn" onclick="window.sendAnswer(${idx})"><span class="prompt-html">${renderRichSnippet(choice)}</span></button>`
           ).join('');
         } else if (type === 'mcq-multi') {
           const choices = getChoices(item);
           el('player-q-choices').innerHTML = `
             <div class="check-grid">
               ${choices.map((choice, idx) =>
-                `<label class="check-item"><input type="checkbox" data-idx="${idx}" /><span>${esc(choice)}</span></label>`
+                `<label class="check-item"><input type="checkbox" data-idx="${idx}" /><span class="prompt-html">${renderRichSnippet(choice)}</span></label>`
               ).join('')}
             </div>
             <div class="submit-wrap"><button id="player-submit-multi" class="btn">Submit</button></div>
@@ -675,8 +703,8 @@
           el('player-q-choices').innerHTML = `
             <div class="col">
               ${promptItems.map((prompt, idx) =>
-                `<div class="pair-row"><div class="pair-left">${esc(prompt)}</div><select class="pair-select" data-prompt="${idx}">${matchItems.map((match, matchIdx) =>
-                  `<option value="${matchIdx}">${esc(match)}</option>`
+                `<div class="pair-row"><div class="pair-left prompt-html">${renderRichSnippet(prompt)}</div><select class="pair-select" data-prompt="${idx}">${matchItems.map((match, matchIdx) =>
+                  `<option value="${matchIdx}">${esc(plainLabelFromRich(match))}</option>`
                 ).join('')}</select></div>`
               ).join('')}
               <div class="submit-wrap"><button id="player-submit-pairs" class="btn">Submit</button></div>
@@ -697,7 +725,7 @@
             <div class="col">
               ${expectedOrder.map((_, orderIdx) =>
                 `<div class="pair-row"><div class="pair-left"><span class="sort-position">${orderIdx + 1}.</span></div><select class="pair-select" data-order="${orderIdx}">${shuffledChoices.map((choice, choiceIdx) =>
-                  `<option value="${choiceIdx}">${esc(choice)}</option>`
+                  `<option value="${choiceIdx}">${esc(plainLabelFromRich(choice))}</option>`
                 ).join('')}</select></div>`
               ).join('')}
               <div class="submit-wrap"><button id="player-submit-sort" class="btn">Submit order</button></div>
